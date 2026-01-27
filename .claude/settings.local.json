@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bundle exec pod install:*)",
+      "Bash(bundle install:*)",
+      "Bash(npm install:*)",
+      "Bash(psql:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(pytest:*)",
+      "Bash(python create_tables.py:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
