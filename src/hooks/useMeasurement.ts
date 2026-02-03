@@ -80,7 +80,7 @@ export const useMeasurement = (
       const recentData = ppgData.slice(-20);
 
       if (recentData.length >= MIN_DATA_POINTS) {
-        // Pad to QC_WINDOW_SIZE (600 samples)
+        // Pad to QC_WINDOW_SIZE (400 samples at 200Hz)
         const paddedData = new Array(QC_WINDOW_SIZE).fill(0).map((_, i) => {
           const sourceIndex = Math.floor((i * recentData.length) / QC_WINDOW_SIZE);
           return recentData[sourceIndex] || recentData[0];

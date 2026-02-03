@@ -12,10 +12,10 @@ export const DATA_SEND_INTERVAL = 1000; // 1 second
 export const DATA_GENERATION_INTERVAL = 100; // 100ms = 10Hz
 
 // PPG sensor sampling rate (Hz)
-export const PPG_SAMPLING_RATE = 300; // 300Hz
+export const PPG_SAMPLING_RATE = 200; // 200Hz (10 samples/packet × 20 packets/sec)
 
 // QC window size (number of samples)
-export const QC_WINDOW_SIZE = 600; // 2 seconds at 300Hz
+export const QC_WINDOW_SIZE = 400; // 2 seconds at 200Hz
 
 // Minimum data points required before sending
 export const MIN_DATA_POINTS = 10;
