@@ -42,7 +42,18 @@
       "Bash(wget:*)",
       "Bash(python:*)",
       "Bash(unzip:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(nvm list:*)",
+      "Bash(nvm use:*)",
+      "Bash(nvm alias:*)",
+      "Bash(npm --version:*)",
+      "Bash(nvm current:*)",
+      "Bash(npx:*)",
+      "Bash(npm run android:*)",
+      "Bash(tar:*)",
+      "Bash(sudo mv:*)",
+      "Bash(export JAVA_HOME=/tmp/jdk-17.0.18+8/Contents/Home)",
+      "Bash(./android/gradlew:*)"
     ]
   }
 }

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/tmp/jdk-17.0.18+8/Contents/Home/bin/java:*)"
+    ]
+  }
+}

@@ -15,6 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  mockLogin: () => Promise<void>; // 임시 로그인 함수
   signup: (
     email: string,
     password: string,
@@ -100,6 +101,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   /**
+   * Mock login for testing (임시 로그인)
+   */
+  const mockLogin = async () => {
+    try {
+      const mockToken = 'mock_token_12345';
+      const mockUser: User = {
+        id: 1,
+        email: 'test@example.com',
+        username: '테스트사용자',
+        provider: null,
+        gender: 'male',
+        birth_year: 1990,
+        height: 175,
+        weight: 70,
+        has_diabetes: false,
+        is_profile_complete: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      await AsyncStorage.setItem(TOKEN_KEY, mockToken);
+      setToken(mockToken);
+      setUser(mockUser);
+    } catch (error) {
+      console.error('Mock login failed:', error);
+      throw error;
+    }
+  };
+
+  /**
    * Signup with email and password
    */
   const signup = async (
@@ -154,6 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     isLoading,
     isAuthenticated: !!user && !!token,
     login,
+    mockLogin,
     signup,
     logout,
     updateUser,

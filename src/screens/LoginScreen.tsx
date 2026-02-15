@@ -20,30 +20,23 @@ type LoginScreenProps = {
 };
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
-  const {login} = useAuth();
+  const {login, mockLogin} = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   /**
-   * Email login
+   * Email login (임시: mockLogin 사용)
    */
   const handleEmailLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('오류', '이메일과 비밀번호를 입력해주세요.');
-      return;
-    }
-
+    // 임시 로그인: 이메일/비밀번호 검증 없이 바로 로그인
     setIsLoading(true);
     try {
-      await login(email, password);
+      await mockLogin();
       // Navigation handled by App.tsx based on auth state
     } catch (error: any) {
       console.error('Login error:', error);
-      Alert.alert(
-        '로그인 실패',
-        error.response?.data?.detail || '이메일 또는 비밀번호가 올바르지 않습니다.'
-      );
+      Alert.alert('로그인 실패', '로그인 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
