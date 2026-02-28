@@ -1,7 +1,7 @@
 /**
  * Utility functions for health metrics evaluation and formatting
  */
-import {HEART_RATE_RANGE, HRV_RANGE, STRESS_RANGE} from '../config/measurement';
+import {HEART_RATE_RANGE, HRV_RANGE} from '../config/measurement';
 
 export interface MetricStatus {
   text: string;
@@ -29,13 +29,13 @@ export const getHRVStatus = (hrv: number): MetricStatus => {
 };
 
 /**
- * Evaluate stress level and return status with color
- * Reference range: 0-100 (lower is better)
+ * Evaluate PI (Perfusion Index) and return status
+ * Reference: < 1% low, 1-5% normal, > 5% high
  */
-export const getStressStatus = (stress: number): MetricStatus => {
-  if (stress <= STRESS_RANGE.low) return {text: '낮음', color: '#34C759'};
-  if (stress <= STRESS_RANGE.moderate) return {text: '보통', color: '#FF9500'};
-  return {text: '높음', color: '#FF3B30'};
+export const getPIStatus = (pi: number): MetricStatus => {
+  if (pi < 1.0) return {text: '낮음', color: '#FF9500'};
+  if (pi <= 5.0) return {text: '정상', color: '#34C759'};
+  return {text: '양호', color: '#0066CC'};
 };
 
 /**
@@ -157,42 +157,30 @@ export const computeAPGIndices = (ppgData: number[]): APGIndices | null => {
 export const getOverallFeedback = (
   heartRate: number,
   hrv: number,
-  stressLevel: number,
 ): {summary: string; advice: string; color: string} => {
-  const hrOk = heartRate >= 60 && heartRate <= 100;
+  const hrOk  = heartRate >= 60 && heartRate <= 100;
   const hrvOk = hrv >= 30;
-  const stressOk = stressLevel <= 40;
 
-  const goodCount = [hrOk, hrvOk, stressOk].filter(Boolean).length;
-
-  if (goodCount === 3) {
+  if (hrOk && hrvOk) {
     return {
-      summary: '전반적으로 심혈관 상태가 양호합니다',
-      advice: '현재 컨디션을 잘 유지하고 있습니다. 규칙적인 측정으로 건강을 관리해보세요.',
-      color: '#34C759',
+      summary: '심박수와 자율신경계가 안정적입니다',
+      advice:  '현재 컨디션이 좋습니다. 규칙적인 측정으로 건강을 관리해보세요.',
+      color:   '#16A34A',
     };
   }
-
-  if (goodCount === 2) {
-    let issue = '';
-    if (!hrOk) {
-      issue = `심박수(${heartRate} bpm)가 정상 범위를 벗어났습니다. `;
-    } else if (!hrvOk) {
-      issue = `HRV(${hrv} ms)가 낮아 자율신경 기능이 다소 저하되어 있습니다. `;
-    } else {
-      issue = `스트레스 지수(${stressLevel})가 높은 편입니다. `;
-    }
+  if (hrOk || hrvOk) {
+    const issue = !hrOk
+      ? `심박수(${heartRate} bpm)가 정상 범위를 벗어났습니다. `
+      : `HRV(${hrv} ms)가 낮아 자율신경 균형이 다소 저하되어 있습니다. `;
     return {
       summary: '대체로 양호하지만 일부 지표를 주의하세요',
-      advice: issue + '충분한 수면과 휴식을 권장합니다.',
-      color: '#FF9500',
+      advice:  issue + '충분한 수면과 휴식을 권장합니다.',
+      color:   '#D97706',
     };
   }
-
   return {
     summary: '심혈관 지표 개선이 필요합니다',
-    advice:
-      '심박수, HRV, 스트레스 중 여러 항목이 주의 범위에 있습니다. 규칙적인 운동과 충분한 휴식을 취하고, 지속될 경우 전문가 상담을 권장합니다.',
-    color: '#FF3B30',
+    advice:  '심박수와 HRV가 모두 주의 범위에 있습니다. 규칙적인 운동과 충분한 휴식을 취하고, 지속될 경우 전문가 상담을 권장합니다.',
+    color:   '#DC2626',
   };
 };

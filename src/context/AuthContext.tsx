@@ -2,9 +2,10 @@
  * Authentication Context
  * Manages global authentication state
  */
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, {createContext, useContext, useState, useEffect} from 'react';
+import {Linking, Alert} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User } from '../types/auth';
+import {User} from '../types/auth';
 import * as authApi from '../api/auth';
 
 const TOKEN_KEY = '@ppg_auth_token';
@@ -15,13 +16,14 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  mockLogin: () => Promise<void>; // 임시 로그인 함수
+  loginWithToken: (accessToken: string) => Promise<void>;
+  mockLogin: () => Promise<void>;
   signup: (
     email: string,
     password: string,
     username?: string,
     gender?: 'male' | 'female' | 'other',
-    birthYear?: number
+    birthYear?: number,
   ) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (user: User) => void;
@@ -30,141 +32,136 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+export const AuthProvider: React.FC<{children: React.ReactNode}> = ({
   children,
 }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser]       = useState<User | null>(null);
+  const [token, setToken]     = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load token from storage on mount
+  // Load stored token on mount
   useEffect(() => {
     loadToken();
   }, []);
 
-  // Set auth token when token changes
+  // Keep auth.ts axios instance in sync
   useEffect(() => {
     authApi.setAuthToken(token);
   }, [token]);
 
-  /**
-   * Load token from AsyncStorage and fetch user data
-   */
+  // Listen for OAuth deep link: ppghealth://auth/callback?access_token=...
+  useEffect(() => {
+    const handleUrl = ({url}: {url: string}) => {
+      if (url.startsWith('ppghealth://auth/callback')) {
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        const accessToken = params.get('access_token');
+        if (accessToken) {
+          loginWithToken(accessToken).catch(err =>
+            Alert.alert('로그인 오류', err?.message ?? '소셜 로그인에 실패했습니다.'),
+          );
+        }
+      }
+    };
+
+    // Handle cold-start deep link
+    Linking.getInitialURL().then(url => {
+      if (url) handleUrl({url});
+    });
+
+    const sub = Linking.addEventListener('url', handleUrl);
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const loadToken = async () => {
     try {
       const storedToken = await AsyncStorage.getItem(TOKEN_KEY);
       if (storedToken) {
         setToken(storedToken);
         authApi.setAuthToken(storedToken);
-
-        // Fetch user data
         const userData = await authApi.getCurrentUser();
         setUser(userData);
       }
     } catch (error) {
       console.error('Failed to load token:', error);
-      // Clear invalid token
       await AsyncStorage.removeItem(TOKEN_KEY);
     } finally {
       setIsLoading(false);
     }
   };
 
-  /**
-   * Refresh user data from server
-   */
   const refreshUser = async () => {
     if (!token) return;
-
-    try {
-      const userData = await authApi.getCurrentUser();
-      setUser(userData);
-    } catch (error) {
-      console.error('Failed to refresh user:', error);
-      throw error;
-    }
+    const userData = await authApi.getCurrentUser();
+    setUser(userData);
   };
 
-  /**
-   * Login with email and password
-   */
+  /** Email + password login */
   const login = async (email: string, password: string) => {
-    try {
-      const response = await authApi.login({ email, password });
-      await AsyncStorage.setItem(TOKEN_KEY, response.access_token);
-      setToken(response.access_token);
-      setUser(response.user);
-    } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
-    }
+    const response = await authApi.login({email, password});
+    await AsyncStorage.setItem(TOKEN_KEY, response.access_token);
+    setToken(response.access_token);
+    setUser(response.user);
   };
 
   /**
-   * Mock login for testing (임시 로그인)
+   * OAuth deep-link login.
+   * Called after the backend redirects to ppghealth://auth/callback?access_token=...
    */
+  const loginWithToken = async (accessToken: string) => {
+    await AsyncStorage.setItem(TOKEN_KEY, accessToken);
+    setToken(accessToken);
+    authApi.setAuthToken(accessToken);
+    const userData = await authApi.getCurrentUser();
+    setUser(userData);
+  };
+
+  /** Temporary mock login (bypasses backend) */
   const mockLogin = async () => {
-    try {
-      const mockToken = 'mock_token_12345';
-      const mockUser: User = {
-        id: 1,
-        email: 'test@example.com',
-        username: '테스트사용자',
-        provider: null,
-        gender: 'male',
-        birth_year: 1990,
-        height: 175,
-        weight: 70,
-        has_diabetes: false,
-        is_profile_complete: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      await AsyncStorage.setItem(TOKEN_KEY, mockToken);
-      setToken(mockToken);
-      setUser(mockUser);
-    } catch (error) {
-      console.error('Mock login failed:', error);
-      throw error;
-    }
+    const mockToken = 'mock_token_12345';
+    const mockUser: User = {
+      id: 1,
+      email: 'test@example.com',
+      username: '테스트사용자',
+      provider: null,
+      gender: 'male',
+      birth_year: 1990,
+      height: 175,
+      weight: 70,
+      has_diabetes: false,
+      is_profile_complete: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    await AsyncStorage.setItem(TOKEN_KEY, mockToken);
+    setToken(mockToken);
+    setUser(mockUser);
   };
 
-  /**
-   * Signup with email and password
-   */
   const signup = async (
     email: string,
     password: string,
     username?: string,
     gender?: 'male' | 'female' | 'other',
-    birthYear?: number
+    birthYear?: number,
   ) => {
-    try {
-      const response = await authApi.signup({
-        email,
-        password,
-        username,
-        gender,
-        birth_year: birthYear,
-      });
-      await AsyncStorage.setItem(TOKEN_KEY, response.access_token);
-      setToken(response.access_token);
-      setUser(response.user);
-    } catch (error) {
-      console.error('Signup failed:', error);
-      throw error;
-    }
+    const response = await authApi.signup({
+      email,
+      password,
+      username,
+      gender,
+      birth_year: birthYear,
+    });
+    await AsyncStorage.setItem(TOKEN_KEY, response.access_token);
+    setToken(response.access_token);
+    setUser(response.user);
   };
 
-  /**
-   * Logout
-   */
   const logout = async () => {
     try {
       await authApi.logout();
-    } catch (error) {
-      console.error('Logout API failed:', error);
+    } catch {
+      // Ignore logout API errors
     } finally {
       await AsyncStorage.removeItem(TOKEN_KEY);
       setToken(null);
@@ -172,36 +169,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  /**
-   * Update user data in state (after profile update)
-   */
   const updateUser = (updatedUser: User) => {
     setUser(updatedUser);
   };
 
-  const value: AuthContextType = {
-    user,
-    token,
-    isLoading,
-    isAuthenticated: !!user && !!token,
-    login,
-    mockLogin,
-    signup,
-    logout,
-    updateUser,
-    refreshUser,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        isLoading,
+        isAuthenticated: !!user && !!token,
+        login,
+        loginWithToken,
+        mockLogin,
+        signup,
+        logout,
+        updateUser,
+        refreshUser,
+      }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
-/**
- * Hook to use auth context
- */
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
 };

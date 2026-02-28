@@ -53,7 +53,10 @@
       "Bash(tar:*)",
       "Bash(sudo mv:*)",
       "Bash(export JAVA_HOME=/tmp/jdk-17.0.18+8/Contents/Home)",
-      "Bash(./android/gradlew:*)"
+      "Bash(./android/gradlew:*)",
+      "Bash(alembic revision --autogenerate -m \"add tags advice pi ac dc columns\")",
+      "Bash(alembic upgrade head)",
+      "Bash(node -e \":*)"
     ]
   }
 }

@@ -12,6 +12,7 @@ import {Button} from '../components/Button';
 import {Input} from '../components/Input';
 import {useAuth} from '../context/AuthContext';
 import * as authApi from '../api/auth';
+import {Colors} from '../config/colors';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 
 type MyPageScreenProps = {
@@ -314,7 +315,7 @@ export const MyPageScreen: React.FC<MyPageScreenProps> = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.background,
   },
   content: {
     padding: 24,
@@ -323,7 +324,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#000000',
+    color: Colors.textPrimary,
     marginBottom: 24,
   },
   profileSection: {
@@ -331,13 +332,13 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     paddingBottom: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: Colors.border,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#007AFF',
+    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -345,28 +346,28 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: Colors.white,
   },
   username: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#000000',
+    color: Colors.textPrimary,
     marginBottom: 4,
   },
   email: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: Colors.textSecondary,
     marginBottom: 8,
   },
   providerBadge: {
-    backgroundColor: '#F0F0F0',
+    backgroundColor: Colors.primaryLight,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
   providerText: {
     fontSize: 12,
-    color: '#666666',
+    color: Colors.primary,
     fontWeight: '500',
   },
   infoSection: {
@@ -378,7 +379,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000000',
+    color: Colors.textPrimary,
     marginBottom: 16,
   },
   infoRow: {
@@ -386,15 +387,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: Colors.border,
   },
   infoLabel: {
     fontSize: 16,
-    color: '#666666',
+    color: Colors.textSecondary,
   },
   infoValue: {
     fontSize: 16,
-    color: '#000000',
+    color: Colors.textPrimary,
     fontWeight: '500',
   },
   editButton: {
@@ -407,7 +408,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#333333',
+    color: Colors.textPrimary,
     marginBottom: 8,
   },
   diabetesButtons: {
@@ -419,22 +420,22 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#DDDDDD',
+    borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.card,
   },
   diabetesButtonActive: {
-    borderColor: '#007AFF',
-    backgroundColor: '#007AFF',
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary,
   },
   diabetesButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#666666',
+    color: Colors.textSecondary,
   },
   diabetesButtonTextActive: {
-    color: '#FFFFFF',
+    color: Colors.white,
   },
   editButtons: {
     gap: 12,
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: '#FF3B30',
+    color: Colors.statusDanger,
     textAlign: 'center',
     marginTop: 40,
   },

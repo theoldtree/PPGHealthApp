@@ -4,7 +4,7 @@ import type {MeasurementRecord} from '../types/measurement';
 import {
   getHeartRateStatus,
   getHRVStatus,
-  getStressStatus,
+  getPIStatus,
 } from '../utils/metrics';
 
 interface DiaryDetailScreenProps {
@@ -75,28 +75,22 @@ export const DiaryDetailScreen: React.FC<DiaryDetailScreenProps> = ({
               <Text style={styles.metricReference}>참고: 30-100 ms</Text>
             </View>
 
-            {/* 스트레스 */}
+            {/* PI */}
             <View style={styles.metricContainer}>
               <View style={styles.metricHeader}>
-                <Text style={styles.metricLabel}>스트레스</Text>
+                <Text style={styles.metricLabel}>PI</Text>
                 <View
                   style={[
                     styles.statusBadge,
-                    {
-                      backgroundColor: getStressStatus(
-                        analysis.general.stressLevel,
-                      ).color,
-                    },
+                    {backgroundColor: getPIStatus(analysis.general.pi).color},
                   ]}>
                   <Text style={styles.statusBadgeText}>
-                    {getStressStatus(analysis.general.stressLevel).text}
+                    {getPIStatus(analysis.general.pi).text}
                   </Text>
                 </View>
               </View>
-              <Text style={styles.metricValue}>
-                {analysis.general.stressLevel} / 100
-              </Text>
-              <Text style={styles.metricReference}>0-100</Text>
+              <Text style={styles.metricValue}>{analysis.general.pi} %</Text>
+              <Text style={styles.metricReference}>참고: 1-5 %</Text>
             </View>
           </View>
 

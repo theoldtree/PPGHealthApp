@@ -2,6 +2,18 @@
  * Measurement Configuration Constants
  */
 
+/**
+ * BLE mode flag.
+ * false = mock PPG replay (BUT-PPG dataset, for dev/demo)
+ * true  = real BLE sensor (set this when hardware is ready)
+ *
+ * When switching to BLE:
+ *  1. Set USE_BLE_SENSOR = true
+ *  2. Remove dataGeneratorRef interval in useMeasurement.startMeasurement
+ *  3. Subscribe to BLE notifications, call injectPPGSample(rawValue) in the callback
+ */
+export const USE_BLE_SENSOR = false;
+
 // Measurement duration in seconds
 export const MEASUREMENT_DURATION = 60; // 1 minute
 

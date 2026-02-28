@@ -104,8 +104,8 @@ export const MainNavigator: React.FC = () => {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#1A1A2E',
-        tabBarInactiveTintColor: '#AAAAAA',
+        tabBarActiveTintColor: '#0066CC',
+        tabBarInactiveTintColor: '#9CA3AF',
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',
@@ -117,7 +117,7 @@ export const MainNavigator: React.FC = () => {
           paddingBottom: 10,
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: '#EEEEEE',
+          borderTopColor: '#E2EAF4',
         },
         tabBarItemStyle: {
           gap: 4,

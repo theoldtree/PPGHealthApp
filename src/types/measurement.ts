@@ -1,43 +1,67 @@
 export interface MeasurementRecord {
   id: string;
   userId: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:mm:ss
+  date: string;       // YYYY-MM-DD
+  time: string;       // HH:mm:ss
   timestamp: number;
-  duration: number; // seconds
+  duration: number;   // seconds
+  ppgSignal?: number[];
   notes?: string;
-  // 분석 결과
+  advice?: string;    // 자동 생성 조언
+  tags?: string[];    // 사용자 선택 태그
   analysis?: {
-    general: GeneralAnalysis;
-    personal: PersonalComparison;
+    general:     GeneralAnalysis;
+    personal:    PersonalComparison;
     demographic: DemographicComparison;
   };
 }
 
 export interface GeneralAnalysis {
-  heartRate: number; // bpm
-  hrv: number; // ms
-  stressLevel: number; // 0-100
-  status: 'excellent' | 'good' | 'normal' | 'poor';
+  heartRate: number;   // bpm
+  hrv:       number;   // ms (RMSSD)
+  pi:        number;   // % Perfusion Index
+  ac:        number;   // AC amplitude
+  dc:        number;   // DC level
+  status:    'excellent' | 'good' | 'normal' | 'poor';
 }
 
 export interface PersonalComparison {
-  heartRateDiff: number; // +/- from personal average
-  hrvDiff: number;
-  trend: 'improving' | 'stable' | 'declining';
+  heartRateDiff: number;   // +/- from personal baseline
+  hrvDiff:       number;
+  trend:         'improving' | 'stable' | 'declining';
 }
 
 export interface DemographicComparison {
-  percentile: number; // 0-100
-  ageGroupAvg: number;
+  percentile:     number;   // 0-100
+  ageGroupAvg:    number;
   genderGroupAvg: number;
-  comparison: 'above_average' | 'average' | 'below_average';
+  comparison:     'above_average' | 'average' | 'below_average';
 }
 
 export interface MarkedDates {
   [date: string]: {
-    marked: boolean;
+    marked:    boolean;
     dotColor?: string;
-    count?: number;
+    count?:    number;
   };
+}
+
+/** 다이어리 날짜별 그룹 */
+export interface DailyGroup {
+  date:    string;
+  records: MeasurementRecord[];
+}
+
+/** 알림 */
+export type NotificationType = 'measurement_complete' | 'reminder' | 'weekly_report';
+
+export interface Notification {
+  id:        string;
+  type:      NotificationType;
+  title:     string;
+  body:      string;
+  createdAt: string;   // ISO timestamp
+  isRead:    boolean;
+  recordId?: string;
+  data?:     Record<string, unknown>;
 }

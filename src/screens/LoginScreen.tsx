@@ -9,10 +9,13 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import {Button} from '../components/Button';
 import {Input} from '../components/Input';
 import {useAuth} from '../context/AuthContext';
+import {getKakaoAuthUrl, getGoogleAuthUrl} from '../api/auth';
+import {Colors} from '../config/colors';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 
 type LoginScreenProps = {
@@ -20,23 +23,31 @@ type LoginScreenProps = {
 };
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
-  const {login, mockLogin} = useAuth();
+  const {login} = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   /**
-   * Email login (임시: mockLogin 사용)
+   * Email login
    */
   const handleEmailLogin = async () => {
-    // 임시 로그인: 이메일/비밀번호 검증 없이 바로 로그인
+    if (!email.trim()) {
+      Alert.alert('입력 오류', '이메일을 입력해주세요.');
+      return;
+    }
+    if (!password.trim()) {
+      Alert.alert('입력 오류', '비밀번호를 입력해주세요.');
+      return;
+    }
     setIsLoading(true);
     try {
-      await mockLogin();
+      await login(email.trim(), password);
       // Navigation handled by App.tsx based on auth state
     } catch (error: any) {
-      console.error('Login error:', error);
-      Alert.alert('로그인 실패', '로그인 중 오류가 발생했습니다.');
+      const msg =
+        error?.response?.data?.detail ?? '로그인 중 오류가 발생했습니다.';
+      Alert.alert('로그인 실패', msg);
     } finally {
       setIsLoading(false);
     }
@@ -50,19 +61,35 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   };
 
   /**
-   * Kakao login (OAuth)
+   * Kakao login (OAuth) — fetches auth URL from backend, opens in browser.
+   * Backend redirects to ppghealth://auth/callback?access_token=...
+   * which AuthContext catches via Linking.addEventListener.
    */
-  const handleKakaoLogin = () => {
-    Alert.alert('준비 중', '카카오 로그인은 현재 개발 중입니다.');
-    // TODO: Implement Kakao OAuth flow
+  const handleKakaoLogin = async () => {
+    setIsLoading(true);
+    try {
+      const url = await getKakaoAuthUrl();
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('오류', '카카오 로그인을 시작할 수 없습니다.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   /**
-   * Google login (OAuth)
+   * Google login (OAuth) — same pattern as Kakao.
    */
-  const handleGoogleLogin = () => {
-    Alert.alert('준비 중', '구글 로그인은 현재 개발 중입니다.');
-    // TODO: Implement Google OAuth flow
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const url = await getGoogleAuthUrl();
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('오류', '구글 로그인을 시작할 수 없습니다.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -141,7 +168,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
         {isLoading && (
           <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#007AFF" />
+            <ActivityIndicator size="large" color={Colors.primary} />
           </View>
         )}
       </ScrollView>
@@ -152,7 +179,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -166,12 +193,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#000000',
+    color: Colors.textPrimary,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666666',
+    color: Colors.textSecondary,
   },
   form: {
     marginBottom: 24,
@@ -183,10 +210,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     fontSize: 14,
-    color: '#666666',
+    color: Colors.textSecondary,
   },
   signupLink: {
-    color: '#007AFF',
+    color: Colors.primary,
     fontWeight: '600',
   },
   divider: {
@@ -197,12 +224,12 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: Colors.border,
   },
   dividerText: {
     marginHorizontal: 12,
     fontSize: 14,
-    color: '#999999',
+    color: Colors.textTertiary,
   },
   socialButtons: {
     gap: 12,
@@ -215,20 +242,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   kakaoButton: {
-    backgroundColor: '#FEE500',
+    backgroundColor: '#FEE500',  // Kakao brand color
     borderColor: '#FEE500',
   },
   googleButton: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DDDDDD',
+    backgroundColor: Colors.card,
+    borderColor: Colors.border,
   },
   socialButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000000',
+    color: Colors.textPrimary,
   },
   googleButtonText: {
-    color: '#666666',
+    color: Colors.textSecondary,
   },
   loadingOverlay: {
     position: 'absolute',

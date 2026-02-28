@@ -37,7 +37,9 @@ export interface AnalysisResponse {
   general: {
     heartRate: number;
     hrv: number;
-    stressLevel: number;
+    pi: number;
+    ac: number;
+    dc: number;
     status: string;
   };
   personal: {
@@ -51,15 +53,13 @@ export interface AnalysisResponse {
     genderGroupAvg: number;
     comparison: string;
   };
+  advice?: string;
 }
 
 // ============================================================================
 // API Functions
 // ============================================================================
 
-/**
- * Start a new measurement session
- */
 export const startMeasurement = async (
   userId: number,
 ): Promise<MeasurementStartResponse> => {
@@ -70,9 +70,6 @@ export const startMeasurement = async (
   return response.data;
 };
 
-/**
- * Submit PPG data for QC feedback
- */
 export const submitQCData = async (
   measurementId: number,
   windowIndex: number,
@@ -93,9 +90,6 @@ export const submitQCData = async (
   return response.data;
 };
 
-/**
- * Get latest QC feedback
- */
 export const getLatestQC = async (
   measurementId: number,
 ): Promise<QCFeedbackResponse> => {
@@ -105,26 +99,17 @@ export const getLatestQC = async (
   return response.data;
 };
 
-/**
- * Complete a measurement
- */
 export const completeMeasurement = async (
   measurementId: number,
   notes?: string,
 ): Promise<MeasurementCompleteResponse> => {
   const response = await apiClient.post<MeasurementCompleteResponse>(
     API_ENDPOINTS.measurementComplete,
-    {
-      measurement_id: measurementId,
-      notes,
-    },
+    {measurement_id: measurementId, notes},
   );
   return response.data;
 };
 
-/**
- * Analyze a completed measurement
- */
 export const analyzeMeasurement = async (
   measurementId: number,
   ppgData?: number[],
@@ -141,9 +126,6 @@ export const analyzeMeasurement = async (
   return response.data;
 };
 
-/**
- * Update battery level
- */
 export const updateBattery = async (
   measurementId: number,
   batteryLevel: number,
@@ -155,6 +137,32 @@ export const updateBattery = async (
 };
 
 /**
+ * Save diary notes, tags, and advice after viewing the result screen.
+ */
+export const saveDiaryEntry = async (
+  measurementId: number,
+  notes: string,
+  tags: string[],
+  advice?: string,
+): Promise<void> => {
+  await apiClient.patch(`/api/v1/measurements/${measurementId}/diary`, {
+    notes,
+    tags,
+    advice,
+  });
+};
+
+/**
+ * Fetch all completed measurements for the current user.
+ */
+export const getMeasurementHistory = async (): Promise<MeasurementRecord[]> => {
+  const response = await apiClient.get<MeasurementRecord[]>(
+    '/api/v1/measurements/history',
+  );
+  return response.data;
+};
+
+/**
  * Convert API analysis response to MeasurementRecord
  */
 export const convertAnalysisToRecord = (
@@ -162,24 +170,22 @@ export const convertAnalysisToRecord = (
   duration: number,
 ): MeasurementRecord => {
   const now = new Date();
-
   return {
     id: `measurement_${analysisData.measurement_id}`,
-    userId: 'user1', // TODO: Get from auth context
+    userId: 'user1',
     date: now.toISOString().split('T')[0],
     time: now.toTimeString().split(' ')[0],
     timestamp: now.getTime(),
     duration,
+    advice: analysisData.advice,
     analysis: {
       general: {
         heartRate: analysisData.general.heartRate,
         hrv: analysisData.general.hrv,
-        stressLevel: analysisData.general.stressLevel,
-        status: analysisData.general.status as
-          | 'excellent'
-          | 'good'
-          | 'normal'
-          | 'poor',
+        pi: analysisData.general.pi ?? 0,
+        ac: analysisData.general.ac ?? 0,
+        dc: analysisData.general.dc ?? 0,
+        status: analysisData.general.status as 'excellent' | 'good' | 'normal' | 'poor',
       },
       personal: {
         heartRateDiff: analysisData.personal.heartRateDiff,
