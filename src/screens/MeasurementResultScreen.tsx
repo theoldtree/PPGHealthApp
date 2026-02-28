@@ -1,12 +1,18 @@
 import React from 'react';
-import {View, Text, StyleSheet, ScrollView} from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
 import type {MeasurementRecord} from '../types/measurement';
-import {Button} from '../components/Button';
 import {
   getHeartRateStatus,
   getHRVStatus,
   getStressStatus,
   getPercentileExplanation,
+  getOverallFeedback,
 } from '../utils/metrics';
 
 interface MeasurementResultScreenProps {
@@ -30,359 +36,392 @@ export const MeasurementResultScreen: React.FC<
   const hrStatus = getHeartRateStatus(analysis.general.heartRate);
   const hrvStatus = getHRVStatus(analysis.general.hrv);
   const stressStatus = getStressStatus(analysis.general.stressLevel);
+  const feedback = getOverallFeedback(
+    analysis.general.heartRate,
+    analysis.general.hrv,
+    analysis.general.stressLevel,
+  );
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>측정 완료</Text>
-        <Text style={styles.subtitle}>분석 결과를 확인하세요</Text>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+
+      {/* ① 종합 피드백 배너 */}
+      <View style={[styles.feedbackBanner, {borderLeftColor: feedback.color}]}>
+        <Text style={[styles.feedbackSummary, {color: feedback.color}]}>
+          {feedback.summary}
+        </Text>
+        <Text style={styles.feedbackAdvice}>{feedback.advice}</Text>
       </View>
 
-      {/* 1. 측정 결과 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>측정 결과</Text>
-
-        {/* 심박수 */}
-        <View style={styles.metricContainer}>
-          <View style={styles.metricHeader}>
-            <Text style={styles.metricLabel}>심박수 (Heart Rate)</Text>
-            <View
-              style={[styles.statusBadge, {backgroundColor: hrStatus.color}]}>
-              <Text style={styles.statusBadgeText}>{hrStatus.text}</Text>
-            </View>
-          </View>
-          <Text style={styles.metricValueLarge}>
-            {analysis.general.heartRate} bpm
-          </Text>
-          <Text style={styles.metricReference}>참고 범위: 60-100 bpm</Text>
-        </View>
-
-        {/* HRV */}
-        <View style={styles.metricContainer}>
-          <View style={styles.metricHeader}>
-            <Text style={styles.metricLabel}>심박 변이도 (HRV)</Text>
-            <View
-              style={[styles.statusBadge, {backgroundColor: hrvStatus.color}]}>
-              <Text style={styles.statusBadgeText}>{hrvStatus.text}</Text>
-            </View>
-          </View>
-          <Text style={styles.metricValueLarge}>
-            {analysis.general.hrv} ms
-          </Text>
-          <Text style={styles.metricReference}>
-            참고 범위: 30-100 ms (높을수록 좋음)
-          </Text>
-        </View>
-
-        {/* 스트레스 */}
-        <View style={styles.metricContainer}>
-          <View style={styles.metricHeader}>
-            <Text style={styles.metricLabel}>스트레스 지수</Text>
-            <View
-              style={[
-                styles.statusBadge,
-                {backgroundColor: stressStatus.color},
-              ]}>
-              <Text style={styles.statusBadgeText}>{stressStatus.text}</Text>
-            </View>
-          </View>
-          <Text style={styles.metricValueLarge}>
-            {analysis.general.stressLevel} / 100
-          </Text>
-          <Text style={styles.metricReference}>0-100 (낮을수록 좋음)</Text>
-        </View>
+      {/* ② 핵심 지표 3종 */}
+      <View style={styles.metricsRow}>
+        <MetricChip
+          label="심박수"
+          value={`${analysis.general.heartRate}`}
+          unit="bpm"
+          statusText={hrStatus.text}
+          statusColor={hrStatus.color}
+        />
+        <MetricChip
+          label="HRV"
+          value={`${analysis.general.hrv}`}
+          unit="ms"
+          statusText={hrvStatus.text}
+          statusColor={hrvStatus.color}
+        />
+        <MetricChip
+          label="스트레스"
+          value={`${analysis.general.stressLevel}`}
+          unit="/ 100"
+          statusText={stressStatus.text}
+          statusColor={stressStatus.color}
+        />
       </View>
 
-      {/* 2. 나의 평균 대비 */}
+      {/* ③ 나의 평균 대비 */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>나의 평균 대비</Text>
-        <Text style={styles.sectionDescription}>
-          최근 측정 기록과 비교한 결과입니다
-        </Text>
 
         <View style={styles.comparisonCard}>
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>심박수</Text>
-            <View style={styles.comparisonValueContainer}>
-              <Text
-                style={[
-                  styles.comparisonValue,
-                  {
-                    color:
-                      analysis.personal.heartRateDiff > 0
-                        ? '#FF3B30'
-                        : analysis.personal.heartRateDiff < 0
-                          ? '#34C759'
-                          : '#3C3C43',
-                  },
-                ]}>
-                {analysis.personal.heartRateDiff > 0 ? '+' : ''}
-                {analysis.personal.heartRateDiff} bpm
-              </Text>
-              <Text style={styles.comparisonNote}>
-                {analysis.personal.heartRateDiff === 0
-                  ? '평균과 동일'
-                  : `평균 대비 ${Math.abs(analysis.personal.heartRateDiff)} bpm ${analysis.personal.heartRateDiff > 0 ? '높음' : '낮음'}`}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>HRV</Text>
-            <View style={styles.comparisonValueContainer}>
-              <Text
-                style={[
-                  styles.comparisonValue,
-                  {
-                    color:
-                      analysis.personal.hrvDiff > 0
-                        ? '#34C759'
-                        : analysis.personal.hrvDiff < 0
-                          ? '#FF3B30'
-                          : '#3C3C43',
-                  },
-                ]}>
-                {analysis.personal.hrvDiff > 0 ? '+' : ''}
-                {analysis.personal.hrvDiff} ms
-              </Text>
-              <Text style={styles.comparisonNote}>
-                {analysis.personal.hrvDiff === 0
-                  ? '평균과 동일'
-                  : `평균 대비 ${Math.abs(analysis.personal.hrvDiff)} ms ${analysis.personal.hrvDiff > 0 ? '높음' : '낮음'}`}
-              </Text>
-            </View>
-          </View>
+          <CompareRow
+            label="심박수"
+            diff={analysis.personal.heartRateDiff}
+            unit="bpm"
+            higherIsBetter={false}
+          />
+          <CompareRow
+            label="HRV"
+            diff={analysis.personal.hrvDiff}
+            unit="ms"
+            higherIsBetter
+          />
         </View>
       </View>
 
-      {/* 3. 동일 연령대 비교 */}
+      {/* ④ 동일 연령대 비교 */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>동일 연령대 비교</Text>
-        <Text style={styles.sectionDescription}>
-          같은 나이와 성별의 평균 데이터와 비교한 결과입니다
-        </Text>
 
-        <View style={styles.percentileCard}>
-          <Text style={styles.percentileLabel}>상위</Text>
-          <Text style={styles.percentileValue}>
-            {analysis.demographic.percentile}%
-          </Text>
+        <View style={styles.percentileRow}>
+          <View style={styles.percentileBlock}>
+            <Text style={styles.percentileLabel}>상위</Text>
+            <Text style={[styles.percentileValue, {color: feedback.color}]}>
+              {analysis.demographic.percentile}%
+            </Text>
+          </View>
           <Text style={styles.percentileNote}>
             {getPercentileExplanation(analysis.demographic.percentile)}
           </Text>
         </View>
 
-        <View style={styles.demographicComparison}>
-          <View style={styles.demographicRow}>
-            <Text style={styles.demographicLabel}>내 심박수</Text>
-            <Text style={styles.demographicValue}>
+        <View style={styles.comparisonCard}>
+          <View style={styles.demoRow}>
+            <Text style={styles.demoLabel}>내 심박수</Text>
+            <Text style={styles.demoValue}>
               {analysis.general.heartRate} bpm
             </Text>
           </View>
-          <View style={styles.demographicRow}>
-            <Text style={styles.demographicLabel}>연령대 평균</Text>
-            <Text style={styles.demographicValue}>
+          <View style={styles.demoRow}>
+            <Text style={styles.demoLabel}>연령대 평균</Text>
+            <Text style={styles.demoValue}>
               {analysis.demographic.ageGroupAvg} bpm
             </Text>
           </View>
-          <View style={styles.demographicRow}>
-            <Text style={styles.demographicLabel}>차이</Text>
+          <View style={[styles.demoRow, {borderBottomWidth: 0}]}>
+            <Text style={styles.demoLabel}>차이</Text>
             <Text
               style={[
-                styles.demographicValue,
-                styles.demographicDiff,
+                styles.demoValue,
                 {
                   color:
-                    analysis.general.heartRate <
-                    analysis.demographic.ageGroupAvg
+                    analysis.general.heartRate < analysis.demographic.ageGroupAvg
                       ? '#34C759'
                       : '#FF3B30',
+                  fontWeight: '700',
                 },
               ]}>
-              {analysis.general.heartRate - analysis.demographic.ageGroupAvg >
-              0
+              {analysis.general.heartRate - analysis.demographic.ageGroupAvg > 0
                 ? '+'
                 : ''}
-              {analysis.general.heartRate - analysis.demographic.ageGroupAvg}{' '}
-              bpm
+              {analysis.general.heartRate - analysis.demographic.ageGroupAvg} bpm
             </Text>
           </View>
         </View>
       </View>
 
+      {/* 참고 안내 */}
+      <View style={styles.notice}>
+        <Text style={styles.noticeText}>
+          ※ 이 결과는 참고용이며 의학적 진단을 대체하지 않습니다.
+        </Text>
+      </View>
+
       <View style={styles.footer}>
-        <Button
-          title="저장하고 닫기"
-          onPress={() => onSaveAndClose('')}
+        <TouchableOpacity
           style={styles.saveButton}
-        />
+          onPress={() => onSaveAndClose('')}
+          activeOpacity={0.85}>
+          <Text style={styles.saveButtonText}>저장하고 닫기</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
 };
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+const MetricChip = ({
+  label,
+  value,
+  unit,
+  statusText,
+  statusColor,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  statusText: string;
+  statusColor: string;
+}) => (
+  <View style={styles.metricChip}>
+    <Text style={styles.metricChipLabel}>{label}</Text>
+    <Text style={styles.metricChipValue}>
+      {value}
+      <Text style={styles.metricChipUnit}> {unit}</Text>
+    </Text>
+    <View style={[styles.statusBadge, {backgroundColor: statusColor}]}>
+      <Text style={styles.statusBadgeText}>{statusText}</Text>
+    </View>
+  </View>
+);
+
+const CompareRow = ({
+  label,
+  diff,
+  unit,
+  higherIsBetter,
+}: {
+  label: string;
+  diff: number;
+  unit: string;
+  higherIsBetter: boolean;
+}) => {
+  const positive = diff > 0;
+  const isGood =
+    diff === 0
+      ? false
+      : (higherIsBetter && positive) || (!higherIsBetter && !positive);
+  const color =
+    diff === 0 ? '#888888' : isGood ? '#34C759' : '#FF3B30';
+
+  return (
+    <View style={styles.compareRow}>
+      <Text style={styles.compareLabel}>{label}</Text>
+      <View style={styles.compareRight}>
+        <Text style={[styles.compareValue, {color}]}>
+          {diff > 0 ? '+' : ''}
+          {diff} {unit}
+        </Text>
+        <Text style={styles.compareNote}>
+          {diff === 0
+            ? '평균과 동일'
+            : `평균 대비 ${Math.abs(diff)} ${unit} ${positive ? '높음' : '낮음'}`}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+// ── Styles ─────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  header: {
-    padding: 24,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#8E8E93',
-  },
-  section: {
-    padding: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000000',
-    marginBottom: 8,
-  },
-  sectionDescription: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginBottom: 20,
-  },
-  metricContainer: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-  },
-  metricHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  metricLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3C3C43',
-  },
-  statusBadge: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-  },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  metricValueLarge: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 4,
-  },
-  metricReference: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
-  comparisonCard: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 16,
-    padding: 20,
-  },
-  comparisonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  comparisonLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#3C3C43',
-    flex: 1,
-  },
-  comparisonValueContainer: {
-    alignItems: 'flex-end',
-    flex: 2,
-  },
-  comparisonValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  comparisonNote: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
-  percentileCard: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  percentileLabel: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginBottom: 8,
-  },
-  percentileValue: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 8,
-  },
-  percentileNote: {
-    fontSize: 13,
-    color: '#8E8E93',
-    textAlign: 'center',
-  },
-  demographicComparison: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 16,
-    padding: 20,
-  },
-  demographicRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  demographicLabel: {
-    fontSize: 15,
-    color: '#3C3C43',
-  },
-  demographicValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  demographicDiff: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  footer: {
-    padding: 24,
-  },
-  saveButton: {
-    marginBottom: 24,
-  },
   errorText: {
     fontSize: 16,
     color: '#FF3B30',
     textAlign: 'center',
+    margin: 32,
+  },
+
+  // Feedback banner
+  feedbackBanner: {
+    margin: 16,
+    padding: 18,
+    backgroundColor: '#F8F8FA',
+    borderRadius: 14,
+    borderLeftWidth: 4,
+  },
+  feedbackSummary: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  feedbackAdvice: {
+    fontSize: 14,
+    color: '#555555',
+    lineHeight: 20,
+  },
+
+  // Metrics row
+  metricsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  metricChip: {
+    flex: 1,
+    backgroundColor: '#F8F8FA',
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+  },
+  metricChipLabel: {
+    fontSize: 11,
+    color: '#888888',
+    marginBottom: 4,
+  },
+  metricChipValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 6,
+  },
+  metricChipUnit: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#888888',
+  },
+  statusBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
+  // Section
+  section: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 12,
+    marginTop: 8,
+  },
+
+  // Comparison card
+  comparisonCard: {
+    backgroundColor: '#F8F8FA',
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  compareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  compareLabel: {
+    fontSize: 15,
+    color: '#444444',
+    fontWeight: '500',
+  },
+  compareRight: {
+    alignItems: 'flex-end',
+  },
+  compareValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  compareNote: {
+    fontSize: 12,
+    color: '#AAAAAA',
+  },
+
+  // Percentile
+  percentileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 16,
+  },
+  percentileBlock: {
+    alignItems: 'center',
+  },
+  percentileLabel: {
+    fontSize: 12,
+    color: '#888888',
+  },
+  percentileValue: {
+    fontSize: 36,
+    fontWeight: '800',
+  },
+  percentileNote: {
+    flex: 1,
+    fontSize: 14,
+    color: '#555555',
+    lineHeight: 20,
+  },
+
+  // Demo rows
+  demoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  demoLabel: {
+    fontSize: 14,
+    color: '#555555',
+  },
+  demoValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1A1A2E',
+  },
+
+  // Notice
+  notice: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  noticeText: {
+    fontSize: 12,
+    color: '#BBBBBB',
+    lineHeight: 18,
+  },
+
+  // Footer
+  footer: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  saveButton: {
+    backgroundColor: '#1A1A2E',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

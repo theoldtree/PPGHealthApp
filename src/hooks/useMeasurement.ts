@@ -17,6 +17,7 @@ import {
   DATA_GENERATION_INTERVAL,
   QC_WINDOW_SIZE,
   MIN_DATA_POINTS,
+  PPG_SAMPLING_RATE,
 } from '../config/measurement';
 
 export interface UseMeasurementResult {
@@ -47,6 +48,7 @@ export const useMeasurement = (
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataGeneratorRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataSenderRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ppgDataRef = useRef<number[]>([]);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -61,7 +63,9 @@ export const useMeasurement = (
   const generateDummyData = () => {
     setPpgData(prev => {
       const newValue = 70 + Math.sin(Date.now() / 1000) * 10 + Math.random() * 5;
-      return [...prev, Math.round(newValue)];
+      const next = [...prev, Math.round(newValue)];
+      ppgDataRef.current = next;
+      return next;
     });
 
     // Simulate battery drain
@@ -119,7 +123,13 @@ export const useMeasurement = (
 
     try {
       await completeMeasurement(measurementId, '');
-      const analysisData = await apiAnalyzeMeasurement(measurementId);
+      // Pass all collected PPG data so the backend can run real analysis
+      const currentPpgData = ppgDataRef.current.slice();
+      const analysisData = await apiAnalyzeMeasurement(
+        measurementId,
+        currentPpgData,
+        PPG_SAMPLING_RATE,
+      );
       const record = convertAnalysisToRecord(analysisData, MEASUREMENT_DURATION);
       onAnalysisComplete(record);
     } catch (error) {
@@ -139,6 +149,7 @@ export const useMeasurement = (
       setIsRecording(true);
       setElapsedTime(0);
       setPpgData([]);
+      ppgDataRef.current = [];
 
       // Start timer
       timerRef.current = setInterval(() => {
@@ -190,6 +201,7 @@ export const useMeasurement = (
         onPress: () => {
           stopMeasurement();
           setPpgData([]);
+          ppgDataRef.current = [];
           setElapsedTime(0);
           setMeasurementId(null);
           setQcFeedback('');

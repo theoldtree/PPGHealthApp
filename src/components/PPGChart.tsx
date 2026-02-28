@@ -1,29 +1,27 @@
-import React, {useEffect, useRef} from 'react';
+import React from 'react';
 import {View, Dimensions, StyleSheet} from 'react-native';
 import {LineChart} from 'react-native-chart-kit';
 
 interface PPGChartProps {
   data: number[];
   isRecording: boolean;
+  width?: number;
+  height?: number;
 }
 
-const CHART_WIDTH = Dimensions.get('window').width - 48;
-const CHART_HEIGHT = 220;
-const MAX_DATA_POINTS = 60; // 1분간 1초당 1개 데이터
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const DEFAULT_HEIGHT = 200;
+const MAX_DATA_POINTS = 60;
 
 export const PPGChart: React.FC<PPGChartProps> = React.memo(
-  ({data, isRecording}) => {
-    // 최근 MAX_DATA_POINTS개만 표시
+  ({data, isRecording, width = SCREEN_WIDTH, height = DEFAULT_HEIGHT}) => {
     const displayData = data.slice(-MAX_DATA_POINTS);
+    const chartData = displayData.length > 0 ? displayData : [0, 0, 0, 0, 0];
 
-    // 데이터가 없으면 0으로 채우기
-    const chartData =
-      displayData.length > 0 ? displayData : [0, 0, 0, 0, 0];
-
-    // Y축 범위 계산
     const minValue = Math.min(...chartData);
     const maxValue = Math.max(...chartData);
-    const padding = (maxValue - minValue) * 0.1 || 10;
+    const range = maxValue - minValue || 10;
+    const padding = range * 0.15;
 
     return (
       <View style={styles.container}>
@@ -33,41 +31,41 @@ export const PPGChart: React.FC<PPGChartProps> = React.memo(
             datasets: [
               {
                 data: chartData,
+                withDots: false,
               },
             ],
           }}
-          width={CHART_WIDTH}
-          height={CHART_HEIGHT}
+          width={width}
+          height={height}
           chartConfig={{
-            backgroundColor: '#FFFFFF',
-            backgroundGradientFrom: '#F2F2F7',
-            backgroundGradientTo: '#F2F2F7',
+            backgroundColor: '#F8F8FA',
+            backgroundGradientFrom: '#F8F8FA',
+            backgroundGradientTo: '#F8F8FA',
             decimalPlaces: 0,
             color: (opacity = 1) =>
               isRecording
-                ? `rgba(0, 122, 255, ${opacity})`
-                : `rgba(142, 142, 147, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(60, 60, 67, ${opacity})`,
+                ? `rgba(26, 26, 46, ${opacity})`
+                : `rgba(180, 180, 190, ${opacity})`,
+            labelColor: () => 'transparent',
             style: {
-              borderRadius: 16,
+              borderRadius: 0,
             },
             propsForDots: {
               r: '0',
             },
             propsForBackgroundLines: {
               strokeDasharray: '',
-              stroke: '#E5E5EA',
-              strokeWidth: 1,
+              stroke: 'transparent',
             },
           }}
           bezier
           style={styles.chart}
-          withInnerLines
-          withOuterLines
+          withInnerLines={false}
+          withOuterLines={false}
           withVerticalLabels={false}
-          withHorizontalLabels
+          withHorizontalLabels={false}
           fromZero={false}
-          segments={4}
+          yAxisInterval={1}
         />
       </View>
     );
@@ -76,12 +74,10 @@ export const PPGChart: React.FC<PPGChartProps> = React.memo(
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 16,
-    padding: 8,
+    backgroundColor: '#F8F8FA',
+    overflow: 'hidden',
   },
   chart: {
-    borderRadius: 16,
+    borderRadius: 0,
   },
 });

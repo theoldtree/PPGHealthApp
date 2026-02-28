@@ -127,10 +127,16 @@ export const completeMeasurement = async (
  */
 export const analyzeMeasurement = async (
   measurementId: number,
+  ppgData?: number[],
+  samplingRate?: number,
 ): Promise<AnalysisResponse> => {
   const response = await apiClient.post<AnalysisResponse>(
     API_ENDPOINTS.measurementAnalyze,
-    {measurement_id: measurementId},
+    {
+      measurement_id: measurementId,
+      ppg_data: ppgData ?? null,
+      sampling_rate: samplingRate ?? 200,
+    },
   );
   return response.data;
 };

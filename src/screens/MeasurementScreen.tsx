@@ -1,23 +1,37 @@
-import React, {useState} from 'react';
-import {View, Text, StyleSheet, Modal} from 'react-native';
-import {Button} from '../components/Button';
-import {PPGChart} from '../components/PPGChart';
-import {MeasurementResultScreen} from './MeasurementResultScreen';
-import type {MeasurementRecord} from '../types/measurement';
-import {formatTime} from '../utils/metrics';
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  Dimensions,
+  TouchableOpacity,
+} from 'react-native';
+import { PPGChart } from '../components/PPGChart';
+import { MeasurementResultScreen } from './MeasurementResultScreen';
+import type { MeasurementRecord } from '../types/measurement';
+import { formatTime, computeAPGIndices } from '../utils/metrics';
 import {
   MEASUREMENT_DURATION,
   BATTERY_THRESHOLD_GOOD,
   BATTERY_THRESHOLD_LOW,
 } from '../config/measurement';
-import {useMeasurement} from '../hooks/useMeasurement';
+import { useMeasurement } from '../hooks/useMeasurement';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
+const batteryColor = (level: number) =>
+  level > BATTERY_THRESHOLD_GOOD
+    ? '#34C759'
+    : level > BATTERY_THRESHOLD_LOW
+    ? '#FF9500'
+    : '#FF3B30';
 
 export const MeasurementScreen: React.FC = () => {
   const [showResult, setShowResult] = useState(false);
   const [measurementResult, setMeasurementResult] =
     useState<MeasurementRecord | null>(null);
 
-  // Use custom measurement hook
   const {
     isRecording,
     elapsedTime,
@@ -33,127 +47,180 @@ export const MeasurementScreen: React.FC = () => {
     setShowResult(true);
   });
 
-  // Handle result save
-  const handleSaveResult = (notes: string) => {
-    console.log('Saving measurement result with notes:', notes);
+  const handleSaveResult = (_notes: string) => {
     setShowResult(false);
   };
 
-  return (
-    <View style={styles.container}>
-      {!isRecording && ppgData.length === 0 && (
-        <View style={styles.initialState}>
-          <Text style={styles.title}>PPG 측정</Text>
-          <Text style={styles.subtitle}>
+  // Compute APG indices from collected PPG data
+  const apgIndices = useMemo(
+    () => computeAPGIndices(ppgData),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ppgData.length],
+  );
+
+  const isActive = isRecording || ppgData.length > 0;
+
+  // ── Initial state ─────────────────────────────────────────────────────────
+  if (!isActive && !showResult) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.initialContent}>
+          <Text style={styles.initialTitle}>PPG 측정</Text>
+          <Text style={styles.initialSub}>
             손가락을 카메라에 대고 측정을 시작하세요
           </Text>
-          <Text style={styles.info}>측정 시간: 1분</Text>
-
-          <Button title="측정 시작" onPress={startMeasurement} />
+          <Text style={styles.initialInfo}>측정 시간: 1분</Text>
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={startMeasurement}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.startButtonText}>측정 시작</Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      {(isRecording || ppgData.length > 0) && !showResult && (
-        <View style={styles.recordingState}>
-          {/* 배터리 표시 */}
-          <View style={styles.batteryContainer}>
-            <Text style={styles.batteryLabel}>기기 배터리</Text>
-            <View style={styles.batteryIndicator}>
-              <View
-                style={[
-                  styles.batteryFill,
-                  {
-                    width: `${batteryLevel}%`,
-                    backgroundColor:
-                      batteryLevel > BATTERY_THRESHOLD_GOOD
-                        ? '#34C759'
-                        : batteryLevel > BATTERY_THRESHOLD_LOW
-                          ? '#FF9500'
-                          : '#FF3B30',
-                  },
-                ]}
-              />
-            </View>
+        {/* 결과 모달 */}
+        <Modal visible={showResult} animationType="slide">
+          {measurementResult && (
+            <MeasurementResultScreen
+              record={measurementResult}
+              onSaveAndClose={handleSaveResult}
+            />
+          )}
+        </Modal>
+      </View>
+    );
+  }
+
+  // ── Recording / post-record state ─────────────────────────────────────────
+  return (
+    <View style={styles.container}>
+      {/* ① 그래프 영역 (풀 너비) */}
+      <View style={styles.chartSection}>
+        <PPGChart
+          data={ppgData}
+          isRecording={isRecording}
+          width={SCREEN_WIDTH}
+          height={220}
+        />
+
+        {/* 그래프 위 오버레이: 타이머(좌) + 배터리(우) */}
+        <View style={styles.chartOverlay}>
+          <Text style={styles.overlayTimer}>
+            {formatTime(elapsedTime)} / {formatTime(MEASUREMENT_DURATION)}
+          </Text>
+          <View style={styles.overlayBatteryRow}>
+            <View
+              style={[
+                styles.batteryDot,
+                { backgroundColor: batteryColor(batteryLevel) },
+              ]}
+            />
             <Text
               style={[
-                styles.batteryText,
-                {
-                  color:
-                    batteryLevel > BATTERY_THRESHOLD_GOOD
-                      ? '#34C759'
-                      : batteryLevel > BATTERY_THRESHOLD_LOW
-                        ? '#FF9500'
-                        : '#FF3B30',
-                },
-              ]}>
+                styles.overlayBatteryText,
+                { color: batteryColor(batteryLevel) },
+              ]}
+            >
               {batteryLevel}%
             </Text>
           </View>
+        </View>
+      </View>
 
-          {/* QC 피드백 */}
-          {qcFeedback && (
+      {/* ② 진행률 바 */}
+      <View style={styles.progressSection}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${progress}%` }]} />
+        </View>
+      </View>
+
+      {/* ③ QC 피드백 */}
+      <View style={styles.qcSection}>
+        {qcFeedback ? (
+          <View
+            style={[
+              styles.qcPill,
+              {
+                backgroundColor: qcIsAcceptable ? '#E8F5E9' : '#FFF3E0',
+                borderColor: qcIsAcceptable ? '#34C759' : '#FF9500',
+              },
+            ]}
+          >
             <View
               style={[
-                styles.qcFeedbackContainer,
-                {
-                  backgroundColor: qcIsAcceptable ? '#E8F5E9' : '#FFF3E0',
-                  borderLeftWidth: 3,
-                  borderLeftColor: qcIsAcceptable ? '#34C759' : '#FF9500',
-                },
-              ]}>
-              <Text
-                style={[
-                  styles.qcFeedbackText,
-                  {color: qcIsAcceptable ? '#2E7D32' : '#E65100'},
-                ]}>
-                {qcFeedback}
-              </Text>
-            </View>
-          )}
-
-          {/* 타이머 */}
-          <View style={styles.timerContainer}>
-            <Text style={styles.timerText}>
-              {formatTime(elapsedTime)} / {formatTime(MEASUREMENT_DURATION)}
+                styles.qcDot,
+                { backgroundColor: qcIsAcceptable ? '#34C759' : '#FF9500' },
+              ]}
+            />
+            <Text
+              style={[
+                styles.qcText,
+                { color: qcIsAcceptable ? '#2E7D32' : '#E65100' },
+              ]}
+            >
+              {qcFeedback}
             </Text>
-            <View style={styles.progressBar}>
-              <View
-                style={[styles.progressFill, {width: `${progress}%`}]}
-              />
-            </View>
           </View>
-
-          {/* 실시간 그래프 */}
-          <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>실시간 PPG 데이터</Text>
-            <PPGChart data={ppgData} isRecording={isRecording} />
-            {isRecording && (
-              <Text style={styles.chartInfo}>
-                데이터 포인트: {ppgData.length}
-              </Text>
-            )}
-          </View>
-
-          {/* 컨트롤 버튼 */}
-          <View style={styles.controls}>
-            {isRecording ? (
-              <Button
-                title="측정 취소"
-                onPress={cancelMeasurement}
-                variant="outline"
-              />
-            ) : (
-              <Button title="다시 측정" onPress={startMeasurement} />
-            )}
-          </View>
-
-          {isRecording && (
-            <Text style={styles.statusText}>
-              측정 중... 기기를 움직이지 마세요
+        ) : (
+          <View style={[styles.qcPill, styles.qcPillIdle]}>
+            <View style={[styles.qcDot, { backgroundColor: '#AAAAAA' }]} />
+            <Text style={styles.qcTextIdle}>
+              {isRecording ? '신호 분석 중...' : '측정 준비됨'}
             </Text>
-          )}
-        </View>
-      )}
+          </View>
+        )}
+      </View>
+
+      {/* ④ 주요 지표 그리드 (b/a · AI · d/a · c/a) */}
+      <View style={styles.metricsSection}>
+        <MetricCard
+          label="b/a"
+          value={apgIndices ? String(apgIndices.bOverA) : '—'}
+          description="동맥 탄성"
+        />
+        <MetricCard
+          label="AI"
+          value={apgIndices ? String(apgIndices.ai) : '—'}
+          description="증강지수"
+        />
+        <MetricCard
+          label="d/a"
+          value={apgIndices ? String(apgIndices.dOverA) : '—'}
+          description="혈관 저항"
+        />
+        <MetricCard
+          label="c/a"
+          value={apgIndices ? String(apgIndices.cOverA) : '—'}
+          description="혈관 순응도"
+        />
+      </View>
+
+      {/* ⑤ 상태 텍스트 + 컨트롤 */}
+      <View style={styles.controlSection}>
+        {isRecording && (
+          <Text style={styles.statusText}>
+            측정 중 · 기기를 움직이지 마세요
+          </Text>
+        )}
+        {isRecording ? (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={cancelMeasurement}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.cancelButtonText}>측정 취소</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={startMeasurement}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.startButtonText}>다시 측정</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* 결과 모달 */}
       <Modal visible={showResult} animationType="slide">
@@ -168,124 +235,220 @@ export const MeasurementScreen: React.FC = () => {
   );
 };
 
+// ── Metric card ───────────────────────────────────────────────────────────────
+const MetricCard = ({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: string;
+  description: string;
+}) => (
+  <View style={styles.metricCard}>
+    <Text style={styles.metricLabel}>{label}</Text>
+    <Text style={styles.metricValue}>{value}</Text>
+    <Text style={styles.metricDesc}>{description}</Text>
+  </View>
+);
+
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  initialState: {
+
+  // Initial state
+  initialContent: {
     flex: 1,
-    padding: 24,
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
   },
-  recordingState: {
-    flex: 1,
-    padding: 24,
-  },
-  title: {
+  initialTitle: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 10,
+  },
+  initialSub: {
+    fontSize: 15,
+    color: '#888888',
+    textAlign: 'center',
     marginBottom: 8,
-    textAlign: 'center',
+    lineHeight: 22,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#8E8E93',
-    marginBottom: 16,
-    textAlign: 'center',
+  initialInfo: {
+    fontSize: 13,
+    color: '#AAAAAA',
+    marginBottom: 40,
   },
-  info: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginBottom: 32,
-    textAlign: 'center',
+
+  // Graph section
+  chartSection: {
+    width: SCREEN_WIDTH,
+    position: 'relative',
   },
-  timerContainer: {
-    marginBottom: 24,
+  chartOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 14,
+    right: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  timerText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#000000',
-    textAlign: 'center',
-    marginBottom: 12,
+  overlayTimer: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555555',
+    backgroundColor: 'rgba(248,248,250,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#E5E5EA',
+  overlayBatteryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(248,248,250,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 5,
+  },
+  batteryDot: {
+    width: 7,
+    height: 7,
     borderRadius: 4,
+  },
+  overlayBatteryText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Progress bar
+  progressSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  progressTrack: {
+    height: 4,
+    backgroundColor: '#EEEEEE',
+    borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#007AFF',
+    backgroundColor: '#1A1A2E',
+    borderRadius: 2,
+  },
+
+  // QC feedback
+  qcSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  qcPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  qcPillIdle: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#DDDDDD',
+  },
+  qcDot: {
+    width: 8,
+    height: 8,
     borderRadius: 4,
   },
-  chartContainer: {
+  qcText: {
+    fontSize: 14,
+    fontWeight: '500',
+    flexShrink: 1,
+  },
+  qcTextIdle: {
+    fontSize: 14,
+    color: '#AAAAAA',
+  },
+
+  // APG Metrics
+  metricsSection: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  metricCard: {
     flex: 1,
-    marginBottom: 24,
+    backgroundColor: '#F8F8FA',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
-  chartTitle: {
+  metricLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 4,
+  },
+  metricValue: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 12,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 4,
   },
-  chartInfo: {
-    fontSize: 12,
-    color: '#8E8E93',
+  metricDesc: {
+    fontSize: 10,
+    color: '#AAAAAA',
     textAlign: 'center',
-    marginTop: 8,
   },
-  controls: {
-    marginBottom: 16,
+
+  // Control section
+  controlSection: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    gap: 10,
   },
   statusText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#FF9500',
     textAlign: 'center',
     fontWeight: '500',
   },
-  batteryContainer: {
-    flexDirection: 'row',
+
+  // Buttons
+  startButton: {
+    backgroundColor: '#1A1A2E',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
   },
-  batteryLabel: {
-    fontSize: 14,
-    color: '#3C3C43',
-    fontWeight: '500',
-    marginRight: 12,
+  startButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
-  batteryIndicator: {
-    flex: 1,
-    height: 8,
-    backgroundColor: '#E5E5EA',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginRight: 12,
+  cancelButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#DDDDDD',
   },
-  batteryFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  batteryText: {
+  cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-  },
-  qcFeedbackContainer: {
-    backgroundColor: '#F2F2F7',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  qcFeedbackText: {
-    fontSize: 14,
-    color: '#3C3C43',
-    textAlign: 'center',
+    color: '#555555',
   },
 });
