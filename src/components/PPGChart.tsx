@@ -16,14 +16,18 @@ export const PPGChart: React.FC<PPGChartProps> = React.memo(
   ({data, isRecording, width = 300, height = 180}) => {
     const pts = data.slice(-MAX_POINTS);
 
+    const padX = 12;
+    const padYTop = 12;
+    const padYBot = 12;
+
     // Flat line when no data yet
     if (pts.length < 2) {
       const mid = (height / 2).toFixed(1);
       return (
-        <View style={{width, height, backgroundColor: '#F8F9FC'}}>
+        <View style={{width, height, backgroundColor: '#F8F9FC', borderRadius: 8}}>
           <Svg width={width} height={height}>
             <Path
-              d={`M 0 ${mid} L ${width} ${mid}`}
+              d={`M ${padX} ${mid} L ${width - padX} ${mid}`}
               stroke="#D8DCE8"
               strokeWidth="1.5"
               fill="none"
@@ -37,33 +41,40 @@ export const PPGChart: React.FC<PPGChartProps> = React.memo(
     const min = Math.min(...pts);
     const max = Math.max(...pts);
     const range = max - min || 1;
-    const padY = range * 0.18;
+    const padY = range * 0.15;
     const lo = min - padY;
     const hi = max + padY;
     const yRange = hi - lo;
 
-    const padX = 2;
     const drawW = width - padX * 2;
-    const drawH = height - 8;
+    const drawH = height - padYTop - padYBot;
 
     const toX = (i: number) => padX + (i / (pts.length - 1)) * drawW;
-    const toY = (v: number) => 4 + ((hi - v) / yRange) * drawH;
+    const toY = (v: number) => padYTop + ((hi - v) / yRange) * drawH;
 
-    // SVG path
+    // Smooth cubic bezier path (catmull-rom style: midpoint control points)
     const linePath = pts
-      .map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`)
+      .map((v, i) => {
+        const x = toX(i).toFixed(1);
+        const y = toY(v).toFixed(1);
+        if (i === 0) return `M ${x} ${y}`;
+        const px = toX(i - 1);
+        const py = toY(pts[i - 1]);
+        const cx = ((px + toX(i)) / 2).toFixed(1);
+        return `C ${cx} ${py.toFixed(1)}, ${cx} ${y}, ${x} ${y}`;
+      })
       .join(' ');
 
-    // Filled area path
+    // Filled area path (close down to bottom)
     const areaPath =
       linePath +
-      ` L ${toX(pts.length - 1).toFixed(1)} ${height}` +
-      ` L ${toX(0).toFixed(1)} ${height} Z`;
+      ` L ${toX(pts.length - 1).toFixed(1)} ${height - padYBot}` +
+      ` L ${toX(0).toFixed(1)} ${height - padYBot} Z`;
 
     const lineColor = isRecording ? Colors.primary : '#A0AABF';
 
     return (
-      <View style={{width, height, backgroundColor: '#F8F9FC'}}>
+      <View style={{width, height, backgroundColor: '#F8F9FC', borderRadius: 8}}>
         <Svg width={width} height={height}>
           <Defs>
             <LinearGradient id="ppgGrad" x1="0" y1="0" x2="0" y2="1">

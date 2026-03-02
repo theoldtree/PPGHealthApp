@@ -35,6 +35,8 @@ import {
   MIN_DATA_POINTS,
   PPG_SAMPLING_RATE,
   USE_BLE_SENSOR,
+  MIN_MEASUREMENT_SECONDS,
+  USE_MOCK_MEASUREMENT,
 } from '../config/measurement';
 import mockPPGData from '../assets/mock_ppg_data.json';
 
@@ -49,6 +51,84 @@ const _pickMockSignal = (): number[] =>
     .ppgSignal;
 /** How many source samples to advance per generator tick (300 Hz / 10 Hz = 30) */
 const _samplesPerTick = _mockSignalRate / (1000 / DATA_GENERATION_INTERVAL);
+
+// ── Local mock analysis (used when USE_MOCK_MEASUREMENT = true) ────────────────────────
+function _mockAdvice(hr: number, hrv: number): string {
+  if (hr > 90) return '심박수가 다소 높습니다. 심호흡과 충분한 휴식을 취해보세요.';
+  if (hrv < 30) return 'HRV가 낮습니다. 스트레스 관리와 규칙적인 수면이 도움이 됩니다.';
+  if (hr >= 60 && hr <= 80 && hrv >= 50) return '심박수와 HRV가 모두 양호합니다. 현재 건강 상태를 잘 유지하고 있습니다.';
+  return '전반적으로 양호한 상태입니다. 꾸준한 유산소 운동이 심혈관 건강에 도움이 됩니다.';
+}
+
+function _buildMockRecord(signal: number[], duration: number): MeasurementRecord {
+  const samples = signal.length > 0 ? signal : Array.from({length: 100}, (_, i) => 70 + Math.sin(i / 10) * 10);
+  const max = Math.max(...samples);
+  const min = Math.min(...samples);
+  const ac = max - min;
+  const dc = samples.reduce((a, b) => a + b, 0) / samples.length;
+  const pi = dc > 0 ? parseFloat(((ac / dc) * 100).toFixed(1)) : 1.2;
+
+  // Count peaks (local max above mean) with minimum spacing of 30 samples
+  let peaks = 0;
+  let lastPeakIdx = -30;
+  for (let i = 1; i < samples.length - 1; i++) {
+    if (
+      i - lastPeakIdx >= 30 &&
+      samples[i] > samples[i - 1] &&
+      samples[i] > samples[i + 1] &&
+      samples[i] > dc
+    ) {
+      peaks++;
+      lastPeakIdx = i;
+    }
+  }
+  const signalDurationS = samples.length / _mockSignalRate;
+  const rawHR = peaks > 0 ? Math.round((peaks / signalDurationS) * 60) : 72;
+  const heartRate = rawHR > 40 && rawHR < 180 ? rawHR : 72;
+  const hrv = Math.round(25 + Math.random() * 40);
+
+  let status: 'excellent' | 'good' | 'normal' | 'poor';
+  if (heartRate >= 60 && heartRate <= 80 && hrv >= 50) { status = 'excellent'; }
+  else if (heartRate >= 55 && heartRate <= 90 && hrv >= 30) { status = 'good'; }
+  else if (heartRate >= 50 && heartRate <= 100) { status = 'normal'; }
+  else { status = 'poor'; }
+
+  const percentile = Math.round(30 + Math.random() * 50);
+  const ageGroupAvg = 72;
+  const genderGroupAvg = 70;
+  const now = new Date();
+
+  return {
+    id: `mock_${Date.now()}`,
+    userId: 'mock_user',
+    date: now.toISOString().split('T')[0],
+    time: now.toTimeString().split(' ')[0],
+    timestamp: now.getTime(),
+    duration,
+    advice: _mockAdvice(heartRate, hrv),
+    analysis: {
+      general: {
+        heartRate,
+        hrv,
+        pi,
+        ac: parseFloat(ac.toFixed(1)),
+        dc: parseFloat(dc.toFixed(1)),
+        status,
+      },
+      personal: {
+        heartRateDiff: heartRate - 74,
+        hrvDiff: hrv - 45,
+        trend: 'stable',
+      },
+      demographic: {
+        percentile,
+        ageGroupAvg,
+        genderGroupAvg,
+        comparison: percentile >= 60 ? 'above_average' : percentile >= 40 ? 'average' : 'below_average',
+      },
+    },
+  };
+}
 
 export interface UseMeasurementResult {
   isRecording: boolean;
@@ -132,6 +212,23 @@ export const useMeasurement = (
 
   // ── QC sender (uses ref to avoid stale closure) ────────────────────────────
   const sendDataToServer = useCallback(async () => {
+    // USE_MOCK_MEASUREMENT: simulate QC locally without hitting the server
+    if (USE_MOCK_MEASUREMENT) {
+      const recentData = ppgDataRef.current.slice(-20);
+      if (recentData.length >= MIN_DATA_POINTS) {
+        const max = Math.max(...recentData);
+        const min = Math.min(...recentData);
+        const snr = max - min;
+        const isGood = snr > 5;
+        setQcFeedback(isGood ? '신호 양호' : '신호 약함 — 손가락 위치 조정');
+        setQcIsAcceptable(isGood);
+        const idx = windowIndexRef.current + 1;
+        windowIndexRef.current = idx;
+        setWindowIndex(idx);
+      }
+      return;
+    }
+
     const mId = measurementIdRef.current;
     if (!mId) return;
 
@@ -163,7 +260,15 @@ export const useMeasurement = (
   }, [batteryLevel]);
 
   // ── Analysis after measurement completes ───────────────────────────────────
-  const runAnalysis = useCallback(async (mId: number) => {
+  const runAnalysis = useCallback(async (mId: number, duration: number = MEASUREMENT_DURATION) => {
+    // USE_MOCK_MEASUREMENT: build result locally — no server calls needed
+    if (USE_MOCK_MEASUREMENT) {
+      const signal = USE_BLE_SENSOR ? ppgDataRef.current.slice() : mockSignalRef.current;
+      const record = _buildMockRecord(signal, duration);
+      onAnalysisComplete(record);
+      return;
+    }
+
     try {
       await completeMeasurement(mId, '');
 
@@ -178,7 +283,7 @@ export const useMeasurement = (
         ppgForAnalysis,
         sampleRate,
       );
-      const record = convertAnalysisToRecord(analysisData, MEASUREMENT_DURATION);
+      const record = convertAnalysisToRecord(analysisData, duration);
       onAnalysisComplete(record);
     } catch (error) {
       console.error('Failed to analyze measurement:', error);
@@ -189,8 +294,13 @@ export const useMeasurement = (
   // ── Start measurement ───────────────────────────────────────────────────────
   const startMeasurement = async () => {
     try {
-      const response = await apiStartMeasurement(userId);
-      const mId = response.measurement_id;
+      let mId: number;
+      if (USE_MOCK_MEASUREMENT) {
+        mId = Date.now(); // local fake ID — no server call
+      } else {
+        const response = await apiStartMeasurement(userId);
+        mId = response.measurement_id;
+      }
       setMeasurementId(mId);
       measurementIdRef.current = mId;
       windowIndexRef.current = 0;
@@ -256,29 +366,70 @@ export const useMeasurement = (
 
   // ── Cancel measurement ──────────────────────────────────────────────────────
   const cancelMeasurement = () => {
-    Alert.alert('측정 취소', '정말 측정을 취소하시겠습니까?', [
-      {text: '아니오', style: 'cancel'},
-      {
-        text: '예',
-        style: 'destructive',
-        onPress: () => {
-          if (timerRef.current) clearInterval(timerRef.current);
-          if (dataGeneratorRef.current) clearInterval(dataGeneratorRef.current);
-          if (dataSenderRef.current) clearInterval(dataSenderRef.current);
-          timerRef.current = null;
-          dataGeneratorRef.current = null;
-          dataSenderRef.current = null;
-          setIsRecording(false);
-          setPpgData([]);
-          ppgDataRef.current = [];
-          setElapsedTime(0);
-          elapsedRef.current = 0;
-          setMeasurementId(null);
-          measurementIdRef.current = null;
-          setQcFeedback('');
-        },
-      },
-    ]);
+    const elapsed = elapsedRef.current;
+    const mId = measurementIdRef.current;
+
+    /** Stop all intervals and mark as not recording */
+    const stopIntervals = () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (dataGeneratorRef.current) clearInterval(dataGeneratorRef.current);
+      if (dataSenderRef.current) clearInterval(dataSenderRef.current);
+      timerRef.current = null;
+      dataGeneratorRef.current = null;
+      dataSenderRef.current = null;
+      setIsRecording(false);
+    };
+
+    /** Fully discard the measurement and reset all state */
+    const discardMeasurement = () => {
+      stopIntervals();
+      setPpgData([]);
+      ppgDataRef.current = [];
+      setElapsedTime(0);
+      elapsedRef.current = 0;
+      setMeasurementId(null);
+      measurementIdRef.current = null;
+      setQcFeedback('');
+    };
+
+    if (elapsed < MIN_MEASUREMENT_SECONDS) {
+      // Too short — offer to continue or discard
+      Alert.alert(
+        '측정 시간 부족',
+        `정확한 분석을 위해 최소 ${MIN_MEASUREMENT_SECONDS}초 이상 측정해야 합니다.\n(현재 ${elapsed}초)`,
+        [
+          {text: '계속 측정', style: 'cancel'},
+          {
+            text: '측정 취소',
+            style: 'destructive',
+            onPress: discardMeasurement,
+          },
+        ],
+      );
+    } else {
+      // Enough data — offer to complete with current data, or discard
+      Alert.alert(
+        '측정 중단',
+        `지금까지 ${elapsed}초 측정된 데이터로\n분석을 완료하시겠습니까?`,
+        [
+          {text: '계속 측정', style: 'cancel'},
+          {
+            text: '데이터 버리기',
+            style: 'destructive',
+            onPress: discardMeasurement,
+          },
+          {
+            text: '현재까지 분석',
+            onPress: () => {
+              stopIntervals();
+              if (mId) {
+                runAnalysis(mId, elapsed);
+              }
+            },
+          },
+        ],
+      );
+    }
   };
 
   const progress = (elapsedTime / MEASUREMENT_DURATION) * 100;

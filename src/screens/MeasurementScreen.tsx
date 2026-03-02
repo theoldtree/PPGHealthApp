@@ -267,7 +267,7 @@ export const MeasurementScreen: React.FC = () => {
       <View style={styles.ctrlSection}>
         {isRecording ? (
           <TouchableOpacity style={styles.cancelBtn} onPress={cancelMeasurement} activeOpacity={0.85}>
-            <Text style={styles.cancelBtnTxt}>측정 취소</Text>
+            <Text style={styles.cancelBtnTxt}>측정 중단</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.startBtn} onPress={startMeasurement} activeOpacity={0.85}>

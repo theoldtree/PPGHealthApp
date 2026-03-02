@@ -12,6 +12,15 @@
 export const SKIP_AUTH = true;
 
 /**
+ * DEV: Use local mock data for measurement (no backend API calls).
+ * true  = skip /start, /qc-data, /complete, /analyze → compute result locally
+ * false = real backend API calls (requires running server + valid JWT)
+ *
+ * Independent from SKIP_AUTH. Set to false when backend is ready to test.
+ */
+export const USE_MOCK_MEASUREMENT = true;
+
+/**
  * BLE mode flag.
  * false = mock PPG replay (BUT-PPG dataset, for dev/demo)
  * true  = real BLE sensor (set this when hardware is ready)
@@ -25,6 +34,13 @@ export const USE_BLE_SENSOR = false;
 
 // Measurement duration in seconds
 export const MEASUREMENT_DURATION = 60; // 1 minute
+
+/**
+ * Minimum seconds required to save a measurement result.
+ * Below this threshold, cancelling simply discards data.
+ * 15s is enough for ~10 heart beats → reliable HR estimate.
+ */
+export const MIN_MEASUREMENT_SECONDS = 15;
 
 // Data transmission interval to server (ms)
 export const DATA_SEND_INTERVAL = 1000; // 1 second

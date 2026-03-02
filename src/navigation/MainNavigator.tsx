@@ -1,6 +1,7 @@
 import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import Svg, {Path, Polyline, Line, Circle} from 'react-native-svg';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {MeasurementScreen} from '../screens/MeasurementScreen';
 import {DiaryScreen} from '../screens/DiaryScreen';
 import {MyPageScreen} from '../screens/MyPageScreen';
@@ -100,6 +101,10 @@ const PersonIcon = ({color}: {color: string}) => (
 // ── Navigator ─────────────────────────────────────────────────────────────────
 
 export const MainNavigator: React.FC = () => {
+  const insets = useSafeAreaInsets();
+  const TAB_BAR_BASE = 64;
+  const tabBarHeight = TAB_BAR_BASE + insets.bottom;
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -114,10 +119,9 @@ export const MainNavigator: React.FC = () => {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#E2EAF4',
+          height: tabBarHeight,
           paddingTop: 8,
-          // NO paddingBottom/height — react-navigation injects safeAreaInsets.bottom
-          // automatically. Overriding it causes items to be cut off by the
-          // Android software navigation bar.
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 16,
         },
         tabBarItemStyle: {
           gap: 2,

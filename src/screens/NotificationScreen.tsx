@@ -274,14 +274,13 @@ const st = StyleSheet.create({
   },
   cardAccent: {width: 3},
   iconWrap: {
-    width: 52,
+    width: 64,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingLeft: 4,
   },
   iconText: {fontSize: 22},
 
-  cardContent: {flex: 1, paddingVertical: 12, paddingLeft: 4, paddingRight: 14},
+  cardContent: {flex: 1, paddingVertical: 12, paddingLeft: 12, paddingRight: 16},
   cardTitleRow:{flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3},
   cardTitle:   {fontSize: 14, fontWeight: '700', color: Colors.textPrimary},
   unreadDot:   {width: 7, height: 7, borderRadius: 3.5, backgroundColor: Colors.primary},

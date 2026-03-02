@@ -147,8 +147,6 @@ export const MyPageScreen: React.FC<MyPageScreenProps> = ({navigation}) => {
       refreshControl={
         <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
       }>
-      <Text style={styles.title}>마이페이지</Text>
-
       {/* Profile Section */}
       <View style={styles.profileSection}>
         <View style={styles.avatar}>
@@ -320,12 +318,6 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
     paddingBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-    marginBottom: 24,
   },
   profileSection: {
     alignItems: 'center',
