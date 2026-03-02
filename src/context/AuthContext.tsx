@@ -7,8 +7,27 @@ import {Linking, Alert} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {User} from '../types/auth';
 import * as authApi from '../api/auth';
+import {SKIP_AUTH} from '../config/measurement';
 
 const TOKEN_KEY = '@ppg_auth_token';
+
+// Dev mock user — matches DB user id=1 (used when SKIP_AUTH=true)
+const DEV_MOCK_USER: User = {
+  id: 1,
+  email: 'yjeongmu@gmail.com',
+  username: '개발자',
+  provider: null,
+  gender: 'male',
+  birth_year: 1990,
+  height: 175,
+  weight: 70,
+  has_diabetes: false,
+  is_profile_complete: true,
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-01T00:00:00.000Z',
+};
+// 1-year JWT for DEV_MOCK_USER (regenerate via: cd ppg-backend && python scripts/gen_token.py)
+const DEV_MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJ5amVvbmdtdUBnbWFpbC5jb20iLCJleHAiOjE4MDM5OTAzMDJ9.jiUpDNBkj3MoYhitcfp-mkAdF10pMTmtRkBWx204ens';
 
 interface AuthContextType {
   user: User | null;
@@ -53,8 +72,12 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({
   useEffect(() => {
     const handleUrl = ({url}: {url: string}) => {
       if (url.startsWith('ppghealth://auth/callback')) {
-        const params = new URLSearchParams(url.split('?')[1] ?? '');
-        const accessToken = params.get('access_token');
+        const query = url.split('?')[1] ?? '';
+        const accessToken = query.split('&').reduce<string | null>((found, pair) => {
+          if (found) return found;
+          const [k, v] = pair.split('=');
+          return k === 'access_token' ? decodeURIComponent(v ?? '') : null;
+        }, null);
         if (accessToken) {
           loginWithToken(accessToken).catch(err =>
             Alert.alert('로그인 오류', err?.message ?? '소셜 로그인에 실패했습니다.'),
@@ -75,6 +98,10 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({
 
   const loadToken = async () => {
     try {
+      // DEV: skip token restore — AppNavigator will call mockLogin()
+      if (SKIP_AUTH) {
+        return;
+      }
       const storedToken = await AsyncStorage.getItem(TOKEN_KEY);
       if (storedToken) {
         setToken(storedToken);
@@ -122,26 +149,13 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({
     setUser(userData);
   };
 
-  /** Temporary mock login (bypasses backend) */
+  /** Dev mock login — uses DEV_MOCK_USER (matches DB user id=1) */
   const mockLogin = async () => {
-    const mockToken = 'mock_token_12345';
-    const mockUser: User = {
-      id: 1,
-      email: 'test@example.com',
-      username: '테스트사용자',
-      provider: null,
-      gender: 'male',
-      birth_year: 1990,
-      height: 175,
-      weight: 70,
-      has_diabetes: false,
-      is_profile_complete: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    await AsyncStorage.setItem(TOKEN_KEY, mockToken);
-    setToken(mockToken);
-    setUser(mockUser);
+    // Write to AsyncStorage so apiClient (client.ts) picks it up on every request
+    await AsyncStorage.setItem(TOKEN_KEY, DEV_MOCK_TOKEN);
+    authApi.setAuthToken(DEV_MOCK_TOKEN);
+    setToken(DEV_MOCK_TOKEN);
+    setUser(DEV_MOCK_USER);
   };
 
   const signup = async (

@@ -37,9 +37,12 @@ export interface AnalysisResponse {
   general: {
     heartRate: number;
     hrv: number;
+    hrvRmssd?: number;
     pi: number;
     ac: number;
     dc: number;
+    apgBOverA?: number;
+    apgAI?: number;
     status: string;
   };
   personal: {
@@ -52,6 +55,8 @@ export interface AnalysisResponse {
     ageGroupAvg: number;
     genderGroupAvg: number;
     comparison: string;
+    apgBOverARef?: number;
+    apgBOverAStd?: number;
   };
   advice?: string;
 }
@@ -62,10 +67,11 @@ export interface AnalysisResponse {
 
 export const startMeasurement = async (
   userId: number,
+  isDev = false,
 ): Promise<MeasurementStartResponse> => {
   const response = await apiClient.post<MeasurementStartResponse>(
     API_ENDPOINTS.measurementStart,
-    {user_id: userId},
+    {user_id: userId, is_dev: isDev},
   );
   return response.data;
 };
@@ -170,10 +176,11 @@ export const convertAnalysisToRecord = (
   duration: number,
 ): MeasurementRecord => {
   const now = new Date();
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return {
     id: `measurement_${analysisData.measurement_id}`,
     userId: 'user1',
-    date: now.toISOString().split('T')[0],
+    date: localDate,
     time: now.toTimeString().split(' ')[0],
     timestamp: now.getTime(),
     duration,
@@ -182,9 +189,12 @@ export const convertAnalysisToRecord = (
       general: {
         heartRate: analysisData.general.heartRate,
         hrv: analysisData.general.hrv,
+        hrvRmssd: analysisData.general.hrvRmssd,
         pi: analysisData.general.pi ?? 0,
         ac: analysisData.general.ac ?? 0,
         dc: analysisData.general.dc ?? 0,
+        apgBOverA: analysisData.general.apgBOverA,
+        apgAI: analysisData.general.apgAI,
         status: analysisData.general.status as 'excellent' | 'good' | 'normal' | 'poor',
       },
       personal: {
@@ -200,6 +210,8 @@ export const convertAnalysisToRecord = (
           | 'above_average'
           | 'average'
           | 'below_average',
+        apgBOverARef: analysisData.demographic.apgBOverARef,
+        apgBOverAStd: analysisData.demographic.apgBOverAStd,
       },
     },
   };

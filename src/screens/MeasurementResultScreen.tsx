@@ -35,12 +35,17 @@ interface Props {
   onSaveAndClose: (notes: string, tags: string[]) => void;
 }
 
+// ── APG b/a 해석 ──────────────────────────────────────────────────────────────
+function apgStiffnessLabel(bOverA: number): {text: string; color: string} {
+  if (bOverA > -0.40) return {text: '양호', color: Colors.statusGood};
+  if (bOverA >= -0.55) return {text: '경미한 노화', color: Colors.statusWarning};
+  return {text: '혈관 경직', color: Colors.statusDanger};
+}
+
 export const MeasurementResultScreen: React.FC<Props> = ({record, onSaveAndClose}) => {
   const {analysis} = record;
 
-  // 조언에서 추천 태그 추출 (mock: record.tags 기반)
   const suggestedTags = record.tags ?? [];
-
   const [selectedTags, setSelectedTags] = useState<string[]>(suggestedTags);
   const [notes, setNotes]               = useState(record.notes ?? '');
 
@@ -58,12 +63,12 @@ export const MeasurementResultScreen: React.FC<Props> = ({record, onSaveAndClose
     );
   }
 
-  const hrStatus  = getHeartRateStatus(analysis.general.heartRate);
-  const hrvStatus = getHRVStatus(analysis.general.hrv);
-  const piStatus  = getPIStatus(analysis.general.pi);
-  const feedback  = getOverallFeedback(analysis.general.heartRate, analysis.general.hrv);
-
-  const statusColor = StatusColors[analysis.general.status] ?? Colors.statusNeutral;
+  const {general, personal, demographic} = analysis;
+  const hrStatus  = getHeartRateStatus(general.heartRate);
+  const hrvStatus = getHRVStatus(general.hrv);
+  const piStatus  = getPIStatus(general.pi);
+  const feedback  = getOverallFeedback(general.heartRate, general.hrv);
+  const statusColor = StatusColors[general.status] ?? Colors.statusNeutral;
 
   return (
     <ScrollView style={st.container} showsVerticalScrollIndicator={false}
@@ -90,70 +95,152 @@ export const MeasurementResultScreen: React.FC<Props> = ({record, onSaveAndClose
       <View style={st.metricsRow}>
         <MetricChip
           label="심박수"
-          value={`${analysis.general.heartRate}`}
+          value={`${general.heartRate}`}
           unit="bpm"
           statusText={hrStatus.text}
           statusColor={hrStatus.color}
         />
         <MetricChip
           label="HRV"
-          value={`${analysis.general.hrv}`}
+          value={`${general.hrv}`}
           unit="ms"
           statusText={hrvStatus.text}
           statusColor={hrvStatus.color}
         />
         <MetricChip
           label="PI"
-          value={`${analysis.general.pi}`}
+          value={`${general.pi}`}
           unit="%"
           statusText={piStatus.text}
           statusColor={piStatus.color}
         />
       </View>
 
-      {/* ④ 나의 평균 대비 */}
+      {/* ④ 집단 대비 분석 */}
       <View style={st.section}>
-        <Text style={st.sectionTitle}>나의 평균 대비</Text>
-        <View style={st.card}>
-          <CompareRow label="심박수" diff={analysis.personal.heartRateDiff} unit="bpm" higherIsBetter={false} />
-          <CompareRow label="HRV"   diff={analysis.personal.hrvDiff}        unit="ms"  higherIsBetter={true}  />
-        </View>
-      </View>
+        <Text style={st.sectionTitle}>집단 대비 분석</Text>
 
-      {/* ⑤ 동일 연령대 비교 */}
-      <View style={st.section}>
-        <Text style={st.sectionTitle}>동일 연령대 비교</Text>
+        {/* 심박수 백분위 */}
         <View style={st.card}>
+          <View style={st.cardHeader}>
+            <Text style={st.cardHeaderTitle}>심박수 백분위</Text>
+            <Text style={st.cardHeaderDesc}>동일 연령·성별 집단 내 위치</Text>
+          </View>
           <View style={st.pctRow}>
             <View style={st.pctBlock}>
               <Text style={st.pctLabel}>상위</Text>
               <Text style={[st.pctValue, {color: statusColor}]}>
-                {analysis.demographic.percentile}%
+                {demographic.percentile}%
               </Text>
             </View>
             <Text style={st.pctNote}>
-              {getPercentileExplanation(analysis.demographic.percentile)}
+              {getPercentileExplanation(demographic.percentile)}
             </Text>
           </View>
 
-          {/* 퍼센타일 바 */}
           <View style={st.barBg}>
             <View style={[st.barFill, {
-              width: `${Math.max(4, Math.min(94, analysis.demographic.percentile))}%`,
+              width: `${Math.max(4, Math.min(94, demographic.percentile))}%`,
               backgroundColor: statusColor,
             }]} />
             <View style={[st.barDot, {
-              left: `${Math.max(4, Math.min(94, analysis.demographic.percentile))}%` as any,
+              left: `${Math.max(4, Math.min(94, demographic.percentile))}%` as any,
               backgroundColor: statusColor,
             }]} />
           </View>
 
-          <DemoRow label="내 심박수"   value={`${analysis.general.heartRate} bpm`} />
-          <DemoRow label="연령대 평균" value={`${analysis.demographic.ageGroupAvg} bpm`} />
+          <DemoRow label="내 심박수"   value={`${general.heartRate} bpm`} />
+          <DemoRow label="연령대 평균" value={`${demographic.ageGroupAvg} bpm`} />
           <DemoRow
             label="차이"
-            value={`${analysis.general.heartRate - analysis.demographic.ageGroupAvg > 0 ? '+' : ''}${analysis.general.heartRate - analysis.demographic.ageGroupAvg} bpm`}
-            valueColor={analysis.general.heartRate < analysis.demographic.ageGroupAvg ? Colors.statusGood : Colors.statusDanger}
+            value={`${general.heartRate - demographic.ageGroupAvg > 0 ? '+' : ''}${general.heartRate - demographic.ageGroupAvg} bpm`}
+            valueColor={general.heartRate <= demographic.ageGroupAvg ? Colors.statusGood : Colors.statusDanger}
+            last
+          />
+        </View>
+
+        {/* APG b/a 동맥 경직도 */}
+        {general.apgBOverA !== undefined && general.apgBOverA !== null && (
+          <View style={[st.card, {marginTop: 10}]}>
+            <View style={st.cardHeader}>
+              <Text style={st.cardHeaderTitle}>동맥 경직도 (APG b/a)</Text>
+              <Text style={st.cardHeaderDesc}>가속도 맥파 b파/a파 비율 · 혈관 탄성 지표</Text>
+            </View>
+            {(() => {
+              const {text, color} = apgStiffnessLabel(general.apgBOverA);
+              return (
+                <>
+                  <View style={st.apgRow}>
+                    <View style={st.apgValueBlock}>
+                      <Text style={[st.apgValue, {color}]}>{general.apgBOverA.toFixed(3)}</Text>
+                      <View style={[st.statusBadge, {backgroundColor: color}]}>
+                        <Text style={st.statusBadgeText}>{text}</Text>
+                      </View>
+                    </View>
+                    <View style={st.apgRefBlock}>
+                      <Text style={st.apgRefLabel}>연령대 기준값</Text>
+                      <Text style={st.apgRefValue}>
+                        {demographic.apgBOverARef !== undefined && demographic.apgBOverARef !== null
+                          ? `${demographic.apgBOverARef.toFixed(2)} ± ${(demographic.apgBOverAStd ?? 0.14).toFixed(2)}`
+                          : '–'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={st.apgScaleRow}>
+                    <ApgScaleItem value="> -0.40" label="양호" color={Colors.statusGood} />
+                    <ApgScaleItem value="-0.40~-0.55" label="경미한 노화" color={Colors.statusWarning} />
+                    <ApgScaleItem value="< -0.55" label="혈관 경직" color={Colors.statusDanger} />
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        )}
+      </View>
+
+      {/* ⑤ 개인 대비 분석 */}
+      <View style={st.section}>
+        <Text style={st.sectionTitle}>개인 대비 분석</Text>
+        <View style={st.card}>
+          <MetricDetailRow
+            label="심박수 변화"
+            value={`${personal.heartRateDiff > 0 ? '+' : ''}${personal.heartRateDiff} bpm`}
+            valueColor={personal.heartRateDiff === 0 ? Colors.textSecondary : personal.heartRateDiff < 0 ? Colors.statusGood : Colors.statusDanger}
+            desc="나의 평균 심박수 대비 오늘의 변화량"
+          />
+          <MetricDetailRow
+            label="HRV SDNN"
+            value={`${general.hrv} ms`}
+            valueColor={general.hrv >= 50 ? Colors.statusGood : general.hrv >= 30 ? Colors.statusWarning : Colors.statusDanger}
+            desc="심박 변동성 (자율신경계 활성 지표. 50ms↑ 양호)"
+            diff={personal.hrvDiff !== 0 ? `${personal.hrvDiff > 0 ? '+' : ''}${personal.hrvDiff} ms` : undefined}
+            diffColor={personal.hrvDiff > 0 ? Colors.statusGood : Colors.statusDanger}
+          />
+          {general.hrvRmssd !== undefined && general.hrvRmssd !== null && (
+            <MetricDetailRow
+              label="HRV RMSSD"
+              value={`${general.hrvRmssd} ms`}
+              valueColor={general.hrvRmssd >= 40 ? Colors.statusGood : general.hrvRmssd >= 20 ? Colors.statusWarning : Colors.statusDanger}
+              desc="부교감신경 활성도 (높을수록 안정. 40ms↑ 양호)"
+            />
+          )}
+          <MetricDetailRow
+            label="관류 지수 (PI)"
+            value={`${general.pi.toFixed(2)} %`}
+            valueColor={piStatus.color}
+            desc="말초 혈류량 지표. 0.2~20% 정상 범위"
+          />
+          <MetricDetailRow
+            label="AC (맥파 진폭)"
+            value={general.ac.toFixed(2)}
+            valueColor={Colors.textPrimary}
+            desc="맥파 교류 성분 — 심장 박동에 의한 혈류 진동"
+          />
+          <MetricDetailRow
+            label="DC (기저 혈류)"
+            value={general.dc.toFixed(2)}
+            valueColor={Colors.textPrimary}
+            desc="맥파 직류 성분 — 조직의 기저 혈류량"
             last
           />
         </View>
@@ -241,27 +328,6 @@ const MetricChip = ({label, value, unit, statusText, statusColor}: {
   </View>
 );
 
-const CompareRow = ({label, diff, unit, higherIsBetter}: {
-  label: string; diff: number; unit: string; higherIsBetter: boolean;
-}) => {
-  const isGood = diff === 0 ? null : (higherIsBetter ? diff > 0 : diff < 0);
-  const color  = diff === 0 ? Colors.textSecondary : isGood ? Colors.statusGood : Colors.statusDanger;
-  const arrow  = diff === 0 ? '─' : diff > 0 ? '▲' : '▼';
-  return (
-    <View style={st.compareRow}>
-      <Text style={st.compareLabel}>{label}</Text>
-      <View style={st.compareRight}>
-        <Text style={[st.compareValue, {color}]}>
-          {arrow} {diff > 0 ? '+' : ''}{diff} {unit}
-        </Text>
-        <Text style={st.compareNote}>
-          {diff === 0 ? '평균과 동일' : `${Math.abs(diff)} ${unit} ${diff > 0 ? '높음' : '낮음'}`}
-        </Text>
-      </View>
-    </View>
-  );
-};
-
 const DemoRow = ({label, value, valueColor, last}: {
   label: string; value: string; valueColor?: string; last?: boolean;
 }) => (
@@ -270,6 +336,32 @@ const DemoRow = ({label, value, valueColor, last}: {
     <Text style={[st.demoValue, valueColor ? {color: valueColor, fontWeight: '700'} : {}]}>
       {value}
     </Text>
+  </View>
+);
+
+const MetricDetailRow = ({label, value, valueColor, desc, diff, diffColor, last}: {
+  label: string; value: string; valueColor: string; desc: string;
+  diff?: string; diffColor?: string; last?: boolean;
+}) => (
+  <View style={[st.detailRow, last && {borderBottomWidth: 0}]}>
+    <View style={st.detailLeft}>
+      <Text style={st.detailLabel}>{label}</Text>
+      <Text style={st.detailDesc}>{desc}</Text>
+    </View>
+    <View style={st.detailRight}>
+      <Text style={[st.detailValue, {color: valueColor}]}>{value}</Text>
+      {diff !== undefined && (
+        <Text style={[st.detailDiff, {color: diffColor ?? Colors.textSecondary}]}>{diff}</Text>
+      )}
+    </View>
+  </View>
+);
+
+const ApgScaleItem = ({value, label, color}: {value: string; label: string; color: string}) => (
+  <View style={st.apgScaleItem}>
+    <View style={[st.apgScaleDot, {backgroundColor: color}]} />
+    <Text style={st.apgScaleVal}>{value}</Text>
+    <Text style={st.apgScaleLbl}>{label}</Text>
   </View>
 );
 
@@ -316,23 +408,19 @@ const st = StyleSheet.create({
   statusBadgeText: {fontSize: 11, fontWeight: '600', color: Colors.white},
 
   section:      {paddingHorizontal: 16, paddingBottom: 4, paddingTop: 12},
-  sectionTitle: {fontSize: 14, fontWeight: '700', color: Colors.textSecondary, marginBottom: 10},
+  sectionTitle: {fontSize: 14, fontWeight: '700', color: Colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5},
 
   card: {
     backgroundColor: Colors.card, borderRadius: 14, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
-
-  compareRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 13, paddingHorizontal: 16,
+  cardHeader: {
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  compareLabel: {fontSize: 14, color: Colors.textSecondary, fontWeight: '500'},
-  compareRight: {alignItems: 'flex-end'},
-  compareValue: {fontSize: 18, fontWeight: '700', marginBottom: 2},
-  compareNote:  {fontSize: 12, color: Colors.textTertiary},
+  cardHeaderTitle: {fontSize: 14, fontWeight: '700', color: Colors.textPrimary},
+  cardHeaderDesc:  {fontSize: 12, color: Colors.textSecondary, marginTop: 2},
 
   pctRow:   {flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14},
   pctBlock: {alignItems: 'center'},
@@ -340,7 +428,7 @@ const st = StyleSheet.create({
   pctValue: {fontSize: 34, fontWeight: '800'},
   pctNote:  {flex: 1, fontSize: 13, color: Colors.textSecondary, lineHeight: 20},
 
-  barBg:  {height: 6, backgroundColor: Colors.border, marginHorizontal: 16, marginBottom: 4, position: 'relative', borderRadius: 3},
+  barBg:  {height: 6, backgroundColor: Colors.border, marginHorizontal: 16, marginBottom: 12, position: 'relative', borderRadius: 3},
   barFill:{height: '100%', borderRadius: 3, position: 'absolute'},
   barDot: {width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: Colors.white, position: 'absolute', top: -4, marginLeft: -7},
 
@@ -351,6 +439,36 @@ const st = StyleSheet.create({
   },
   demoLabel: {fontSize: 13, color: Colors.textSecondary},
   demoValue: {fontSize: 14, fontWeight: '600', color: Colors.textPrimary},
+
+  // APG section
+  apgRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  apgValueBlock: {alignItems: 'flex-start', gap: 6},
+  apgValue:      {fontSize: 28, fontWeight: '800'},
+  apgRefBlock:   {alignItems: 'flex-end'},
+  apgRefLabel:   {fontSize: 11, color: Colors.textSecondary, marginBottom: 2},
+  apgRefValue:   {fontSize: 13, fontWeight: '600', color: Colors.textPrimary},
+  apgScaleRow:   {flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 12},
+  apgScaleItem:  {flex: 1, alignItems: 'center', gap: 3},
+  apgScaleDot:   {width: 8, height: 8, borderRadius: 4},
+  apgScaleVal:   {fontSize: 10, color: Colors.textSecondary, textAlign: 'center'},
+  apgScaleLbl:   {fontSize: 10, fontWeight: '600', color: Colors.textPrimary, textAlign: 'center'},
+
+  // Detail rows (personal section)
+  detailRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 12, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  detailLeft:  {flex: 1, marginRight: 12},
+  detailLabel: {fontSize: 14, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2},
+  detailDesc:  {fontSize: 11, color: Colors.textTertiary, lineHeight: 16},
+  detailRight: {alignItems: 'flex-end'},
+  detailValue: {fontSize: 16, fontWeight: '700'},
+  detailDiff:  {fontSize: 12, marginTop: 2},
 
   adviceCard: {
     flexDirection: 'row', backgroundColor: Colors.primaryLight, borderRadius: 14,

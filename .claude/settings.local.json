@@ -63,7 +63,25 @@
       "Bash(ipconfig getifaddr en0)",
       "Bash(ipconfig getifaddr en1)",
       "Bash(grep -n \"SafeAreaView\\\\|useSafeAreaInsets\\\\|paddingBottom\" /Users/yujeongmu/Desktop/PPGHealthApp/src/screens/*.tsx)",
-      "Bash(grep -n \"GoogleOAuthService\\\\|get_authorization_url\" /Users/yujeongmu/Desktop/ppg-backend/app/services/*.py)"
+      "Bash(grep -n \"GoogleOAuthService\\\\|get_authorization_url\" /Users/yujeongmu/Desktop/ppg-backend/app/services/*.py)",
+      "Bash(alembic current)",
+      "Bash(alembic stamp a1b2c3d4e5f6)",
+      "Bash(sqlite3 test.db \"SELECT id, email, username, gender, birth_year FROM users;\")",
+      "Bash(JWT=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJ5amVvbmdtdUBnbWFpbC5jb20iLCJleHAiOjE3NzMwNTczMDF9.EJisNo8jPsxi89pRX3fjBmZwqFPWkJxg6dAYwmp1t_0\")",
+      "Bash(__NEW_LINE_e75b19b626cf2dbc__ echo \"=== History API ===\")",
+      "Bash(sqlite3 /Users/yujeongmu/Desktop/ppg-backend/test.db \":*)",
+      "Bash(pip3 show python-jose)",
+      "Bash(venv/bin/python3 -c \":*)",
+      "Bash(NEW_TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJ5amVvbmdtdUBnbWFpbC5jb20iLCJleHAiOjE4MDM5OTAzMDJ9.jiUpDNBkj3MoYhitcfp-mkAdF10pMTmtRkBWx204ens\")",
+      "Bash(venv/bin/pip list)",
+      "Bash(venv/bin/alembic current)",
+      "Bash(venv/bin/alembic upgrade head)",
+      "Bash(venv/bin/pip install apscheduler)",
+      "Bash(kill -HUP 19045)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJ5amVvbmdtdUBnbWFpbC5jb20iLCJleHAiOjE4MDM5OTAzMDJ9.jiUpDNBkj3MoYhitcfp-mkAdF10pMTmtRkBWx204ens\")",
+      "Bash(__NEW_LINE_0a7c432b3f9ffb19__ echo \"\")",
+      "Bash(alembic revision --autogenerate -m \"add_is_dev_to_measurements\")",
+      "Bash(alembic stamp 959e7bb7abf2)"
     ]
   }
 }

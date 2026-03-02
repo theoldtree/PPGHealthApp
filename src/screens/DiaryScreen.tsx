@@ -1,4 +1,5 @@
 import React, {useState, useRef, useCallback, useMemo, useEffect} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
 import {
   View,
   Text,
@@ -22,7 +23,12 @@ const MOCK_RECORDS: MeasurementRecord[] = (mockData as any).measurements as Meas
 
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 const DAY_KOR = ['일', '월', '화', '수', '목', '금', '토'];
-const TODAY = '2026-02-28';
+
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const TODAY = localDateStr(new Date());
 
 function formatDateLabel(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -40,7 +46,7 @@ function buildDateRange(center: string, days = 30): string[] {
   for (let i = -days; i <= days; i++) {
     const d = new Date(base);
     d.setDate(d.getDate() + i);
-    result.push(d.toISOString().slice(0, 10));
+    result.push(localDateStr(d));
   }
   return result;
 }
@@ -318,23 +324,25 @@ export const DiaryScreen: React.FC = () => {
   const dateRange = useMemo(() => buildDateRange(TODAY), []);
   const stripRef  = useRef<FlatList>(null);
 
-  // Load real measurements from API; fall back to mock on error
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        const history = await getMeasurementHistory();
-        if (history.length > 0) {
-          setAllRecords(history);
+  // Reload measurements every time the diary tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      const load = async () => {
+        setIsLoading(true);
+        try {
+          const history = await getMeasurementHistory();
+          if (history.length > 0) {
+            setAllRecords(history);
+          }
+        } catch {
+          // Backend not available — keep mock data
+        } finally {
+          setIsLoading(false);
         }
-      } catch {
-        // Backend not available — keep mock data
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, []);
+      };
+      load();
+    }, []),
+  );
 
   const recordsMap = useMemo(() => groupByDate(allRecords), [allRecords]);
 

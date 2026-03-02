@@ -17,11 +17,14 @@ export interface MeasurementRecord {
 }
 
 export interface GeneralAnalysis {
-  heartRate: number;   // bpm
-  hrv:       number;   // ms (RMSSD)
-  pi:        number;   // % Perfusion Index
-  ac:        number;   // AC amplitude
-  dc:        number;   // DC level
+  heartRate: number;       // bpm
+  hrv:       number;       // ms SDNN
+  hrvRmssd?: number;       // ms RMSSD
+  pi:        number;       // % Perfusion Index
+  ac:        number;       // AC amplitude
+  dc:        number;       // DC level
+  apgBOverA?: number;      // APG b/a ratio (arterial stiffness)
+  apgAI?:    number;       // APG aging index
   status:    'excellent' | 'good' | 'normal' | 'poor';
 }
 
@@ -36,6 +39,8 @@ export interface DemographicComparison {
   ageGroupAvg:    number;
   genderGroupAvg: number;
   comparison:     'above_average' | 'average' | 'below_average';
+  apgBOverARef?:  number;   // Takazawa reference b/a for this age/gender
+  apgBOverAStd?:  number;   // std of reference
 }
 
 export interface MarkedDates {

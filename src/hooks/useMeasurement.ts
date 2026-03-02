@@ -37,6 +37,7 @@ import {
   USE_BLE_SENSOR,
   MIN_MEASUREMENT_SECONDS,
   USE_MOCK_MEASUREMENT,
+  SKIP_AUTH,
 } from '../config/measurement';
 import mockPPGData from '../assets/mock_ppg_data.json';
 
@@ -60,7 +61,7 @@ function _mockAdvice(hr: number, hrv: number): string {
   return '전반적으로 양호한 상태입니다. 꾸준한 유산소 운동이 심혈관 건강에 도움이 됩니다.';
 }
 
-function _buildMockRecord(signal: number[], duration: number): MeasurementRecord {
+function _buildMockRecord(signal: number[], duration: number, mId?: number): MeasurementRecord {
   const samples = signal.length > 0 ? signal : Array.from({length: 100}, (_, i) => 70 + Math.sin(i / 10) * 10);
   const max = Math.max(...samples);
   const min = Math.min(...samples);
@@ -97,11 +98,12 @@ function _buildMockRecord(signal: number[], duration: number): MeasurementRecord
   const ageGroupAvg = 72;
   const genderGroupAvg = 70;
   const now = new Date();
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   return {
-    id: `mock_${Date.now()}`,
+    id: mId ? `measurement_${mId}` : `mock_${Date.now()}`,
     userId: 'mock_user',
-    date: now.toISOString().split('T')[0],
+    date: localDate,
     time: now.toTimeString().split(' ')[0],
     timestamp: now.getTime(),
     duration,
@@ -110,9 +112,12 @@ function _buildMockRecord(signal: number[], duration: number): MeasurementRecord
       general: {
         heartRate,
         hrv,
+        hrvRmssd: Math.round(hrv * 0.85 + Math.random() * 5),   // RMSSD ~ 0.85×SDNN
         pi,
         ac: parseFloat(ac.toFixed(1)),
         dc: parseFloat(dc.toFixed(1)),
+        apgBOverA: parseFloat((-0.30 - Math.random() * 0.15).toFixed(3)),  // mock: -0.30 ~ -0.45
+        apgAI: parseFloat((-0.05 - Math.random() * 0.10).toFixed(3)),
         status,
       },
       personal: {
@@ -125,6 +130,8 @@ function _buildMockRecord(signal: number[], duration: number): MeasurementRecord
         ageGroupAvg,
         genderGroupAvg,
         comparison: percentile >= 60 ? 'above_average' : percentile >= 40 ? 'average' : 'below_average',
+        apgBOverARef: -0.33,   // Takazawa mock reference (30s age group)
+        apgBOverAStd: 0.14,
       },
     },
   };
@@ -261,10 +268,11 @@ export const useMeasurement = (
 
   // ── Analysis after measurement completes ───────────────────────────────────
   const runAnalysis = useCallback(async (mId: number, duration: number = MEASUREMENT_DURATION) => {
-    // USE_MOCK_MEASUREMENT: build result locally — no server calls needed
+    // USE_MOCK_MEASUREMENT: build result locally, but still complete in DB for diary save
     if (USE_MOCK_MEASUREMENT) {
+      try { await completeMeasurement(mId, ''); } catch { /* ignore */ }
       const signal = USE_BLE_SENSOR ? ppgDataRef.current.slice() : mockSignalRef.current;
-      const record = _buildMockRecord(signal, duration);
+      const record = _buildMockRecord(signal, duration, mId);
       onAnalysisComplete(record);
       return;
     }
@@ -294,13 +302,10 @@ export const useMeasurement = (
   // ── Start measurement ───────────────────────────────────────────────────────
   const startMeasurement = async () => {
     try {
-      let mId: number;
-      if (USE_MOCK_MEASUREMENT) {
-        mId = Date.now(); // local fake ID — no server call
-      } else {
-        const response = await apiStartMeasurement(userId);
-        mId = response.measurement_id;
-      }
+      // Always call start to get a real DB measurement_id (needed for diary save)
+      // In mock mode we skip QC/analyze but keep start/complete to track in DB
+      const response = await apiStartMeasurement(userId, SKIP_AUTH);
+      const mId = response.measurement_id;
       setMeasurementId(mId);
       measurementIdRef.current = mId;
       windowIndexRef.current = 0;
