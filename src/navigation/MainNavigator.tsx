@@ -109,18 +109,18 @@ export const MainNavigator: React.FC = () => {
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',
-          marginBottom: 6,
         },
         tabBarStyle: {
-          height: 76,
-          paddingTop: 10,
-          paddingBottom: 10,
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#E2EAF4',
+          paddingTop: 8,
+          // NO paddingBottom/height — react-navigation injects safeAreaInsets.bottom
+          // automatically. Overriding it causes items to be cut off by the
+          // Android software navigation bar.
         },
         tabBarItemStyle: {
-          gap: 4,
+          gap: 2,
         },
       }}>
       <Tab.Screen

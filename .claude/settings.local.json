@@ -56,7 +56,14 @@
       "Bash(./android/gradlew:*)",
       "Bash(alembic revision --autogenerate -m \"add tags advice pi ac dc columns\")",
       "Bash(alembic upgrade head)",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android)",
+      "Bash(keytool -genkey -v -keystore ~/.android/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname \"CN=Android Debug,O=Android,C=US\")",
+      "Bash(open \"https://accounts.google.com/o/oauth2/v2/auth?client_id=742834332313-g5hvifnd82opp9bg04d0e0uq0esq9j27.apps.googleusercontent.com&redirect_uri=http://localhost:8000/api/v1/auth/google/callback&response_type=code&scope=openid email profile&access_type=offline\")",
+      "Bash(ipconfig getifaddr en0)",
+      "Bash(ipconfig getifaddr en1)",
+      "Bash(grep -n \"SafeAreaView\\\\|useSafeAreaInsets\\\\|paddingBottom\" /Users/yujeongmu/Desktop/PPGHealthApp/src/screens/*.tsx)",
+      "Bash(grep -n \"GoogleOAuthService\\\\|get_authorization_url\" /Users/yujeongmu/Desktop/ppg-backend/app/services/*.py)"
     ]
   }
 }

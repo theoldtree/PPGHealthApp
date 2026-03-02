@@ -176,20 +176,15 @@ export const NotificationScreen: React.FC = () => {
 
   return (
     <View style={st.screen}>
-      {/* 헤더 */}
-      <View style={st.header}>
-        <View>
-          <Text style={st.headerTitle}>알림</Text>
-          {unreadCount > 0 && (
-            <Text style={st.headerSub}>{unreadCount}개의 읽지 않은 알림</Text>
-          )}
-        </View>
-        {unreadCount > 0 && (
+      {/* 헤더: 읽지 않은 알림 수 + 모두 읽음 버튼 */}
+      {unreadCount > 0 && (
+        <View style={st.header}>
+          <Text style={st.headerSub}>{unreadCount}개의 읽지 않은 알림</Text>
           <TouchableOpacity onPress={markAllRead} activeOpacity={0.7}>
             <Text style={st.markAllBtn}>모두 읽음</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
 
       <ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>
         {/* 오늘 */}
@@ -240,16 +235,14 @@ const st = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 56 : 24,
-    paddingBottom: 14,
-    backgroundColor: Colors.card,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: Colors.primaryLight,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerTitle: {fontSize: 22, fontWeight: '800', color: Colors.textPrimary},
-  headerSub:   {fontSize: 12, color: Colors.textSecondary, marginTop: 2},
+  headerSub:   {fontSize: 12, color: Colors.primary, fontWeight: '600'},
   markAllBtn:  {fontSize: 13, color: Colors.primary, fontWeight: '600'},
 
   section:      {paddingHorizontal: 16, paddingTop: 16},
@@ -281,13 +274,14 @@ const st = StyleSheet.create({
   },
   cardAccent: {width: 3},
   iconWrap: {
-    width: 48,
+    width: 52,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingLeft: 4,
   },
   iconText: {fontSize: 22},
 
-  cardContent: {flex: 1, paddingVertical: 12, paddingRight: 14},
+  cardContent: {flex: 1, paddingVertical: 12, paddingLeft: 4, paddingRight: 14},
   cardTitleRow:{flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3},
   cardTitle:   {fontSize: 14, fontWeight: '700', color: Colors.textPrimary},
   unreadDot:   {width: 7, height: 7, borderRadius: 3.5, backgroundColor: Colors.primary},

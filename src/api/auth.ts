@@ -10,8 +10,9 @@ import {
   TokenResponse,
   User,
 } from '../types/auth';
+import {API_BASE_URL as BASE_URL} from '../config/api';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = `${BASE_URL}/api/v1`;
 
 // Axios instance with default config
 const api = axios.create({

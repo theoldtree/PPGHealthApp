@@ -11,6 +11,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Button} from '../components/Button';
 import {Input} from '../components/Input';
 import {useAuth} from '../context/AuthContext';
@@ -24,6 +25,7 @@ type LoginScreenProps = {
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const {login} = useAuth();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -60,6 +62,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     navigation.navigate('Signup');
   };
 
+  /** 네트워크/설정 오류 메세지 공통 처리 */
+  const getOAuthErrorMsg = (error: any, provider: string) => {
+    if (!error?.response) {
+      return `서버에 연결할 수 없습니다.\n백엔드가 실행 중인지 확인해주세요.`;
+    }
+    if (error.response?.data?.detail?.includes('not configured')) {
+      return `${provider} API 키가 서버에 설정되지 않았습니다.`;
+    }
+    return `${provider} 로그인을 시작할 수 없습니다.`;
+  };
+
   /**
    * Kakao login (OAuth) — fetches auth URL from backend, opens in browser.
    * Backend redirects to ppghealth://auth/callback?access_token=...
@@ -70,8 +83,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     try {
       const url = await getKakaoAuthUrl();
       await Linking.openURL(url);
-    } catch {
-      Alert.alert('오류', '카카오 로그인을 시작할 수 없습니다.');
+    } catch (error: any) {
+      Alert.alert('카카오 로그인 불가', getOAuthErrorMsg(error, 'Kakao'));
     } finally {
       setIsLoading(false);
     }
@@ -79,14 +92,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
   /**
    * Google login (OAuth) — same pattern as Kakao.
+   * NOTE: redirect_uri (localhost:8000) must be reachable from the device browser.
+   * For physical device testing, use ngrok or set redirect_uri to Mac's LAN IP.
    */
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
       const url = await getGoogleAuthUrl();
       await Linking.openURL(url);
-    } catch {
-      Alert.alert('오류', '구글 로그인을 시작할 수 없습니다.');
+    } catch (error: any) {
+      Alert.alert('구글 로그인 불가', getOAuthErrorMsg(error, 'Google'));
     } finally {
       setIsLoading(false);
     }
@@ -97,7 +112,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, {paddingBottom: insets.bottom + 24}]}
         keyboardShouldPersistTaps="handled">
         {/* Title */}
         <View style={styles.header}>

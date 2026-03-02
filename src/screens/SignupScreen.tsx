@@ -9,9 +9,11 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Button} from '../components/Button';
 import {Input} from '../components/Input';
 import {useAuth} from '../context/AuthContext';
+import {Colors} from '../config/colors';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 
 type SignupScreenProps = {
@@ -20,6 +22,7 @@ type SignupScreenProps = {
 
 export const SignupScreen: React.FC<SignupScreenProps> = ({navigation}) => {
   const {signup} = useAuth();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -88,7 +91,7 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({navigation}) => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         style={styles.scrollContainer}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, {paddingBottom: insets.bottom + 40}]}
         keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>회원가입</Text>
 
@@ -111,6 +114,8 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({navigation}) => {
             placeholder="사용자명을 입력하세요"
             value={username}
             onChangeText={setUsername}
+            autoCapitalize="none"
+            autoCorrect={false}
             editable={!isLoading}
           />
 
@@ -222,7 +227,7 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.background,
   },
   scrollContainer: {
     flex: 1,
@@ -234,7 +239,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#000000',
+    color: Colors.textPrimary,
     marginBottom: 32,
     textAlign: 'center',
   },
@@ -244,7 +249,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000000',
+    color: Colors.textPrimary,
     marginBottom: 16,
   },
   genderContainer: {
@@ -253,7 +258,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#333333',
+    color: Colors.textPrimary,
     marginBottom: 8,
   },
   genderButtons: {
@@ -265,22 +270,22 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#DDDDDD',
+    borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.card,
   },
   genderButtonActive: {
-    borderColor: '#007AFF',
-    backgroundColor: '#007AFF',
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary,
   },
   genderButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#666666',
+    color: Colors.textSecondary,
   },
   genderButtonTextActive: {
-    color: '#FFFFFF',
+    color: Colors.white,
   },
   signupButton: {
     marginTop: 8,
@@ -291,7 +296,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: Colors.primary,
     fontWeight: '600',
   },
 });

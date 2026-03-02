@@ -3,14 +3,21 @@
  */
 import {Platform} from 'react-native';
 
-// API Base URL
-// Note: Android emulator uses 10.0.2.2 to access host machine's localhost
+// ── Dev server address ─────────────────────────────────────────────────────
+// iOS Simulator   → localhost (Mac loopback tunneled automatically)
+// Android Emulator → 10.0.2.2 (QEMU special alias for host loopback)
+// Android Physical → Mac's actual LAN IP (must be on same WiFi)
+//
+// Change DEV_HOST to your Mac's IP when testing on a physical Android device:
+//   $ ipconfig getifaddr en0   → e.g. 192.168.0.116
+const DEV_HOST = Platform.select({
+  ios: 'localhost',
+  android: '10.0.2.2',   // ← swap to '192.168.0.116' for real device
+  default: 'localhost',
+});
+
 export const API_BASE_URL = __DEV__
-  ? Platform.select({
-      ios: 'http://localhost:8000',
-      android: 'http://10.0.2.2:8000',
-      default: 'http://localhost:8000',
-    })
+  ? `http://${DEV_HOST}:8000`
   : 'https://your-production-api.com';  // Production
 
 // API Endpoints

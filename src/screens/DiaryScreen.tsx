@@ -214,8 +214,13 @@ const RecordCard = ({record}: {record: MeasurementRecord}) => {
             </View>
           )}
 
-          {/* 메모 */}
-          {record.notes ? <Text style={cardSt.notes}>✏️ {record.notes}</Text> : null}
+          {/* 나의 메모 */}
+          <Text style={cardSt.secTitle}>나의 메모</Text>
+          <View style={cardSt.memoBox}>
+            <Text style={record.notes ? cardSt.notes : cardSt.notesEmpty}>
+              {record.notes || '메모가 없습니다'}
+            </Text>
+          </View>
         </View>
       )}
     </View>
@@ -244,9 +249,11 @@ const cardSt = StyleSheet.create({
   box:     {backgroundColor: Colors.background, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 10},
   adviceBox:{flexDirection: 'row', backgroundColor: Colors.primaryLight, borderRadius: 10, padding: 12, marginBottom: 8},
   adviceText:{flex: 1, fontSize: 13, color: Colors.textPrimary, lineHeight: 20},
-  tag:     {backgroundColor: Colors.primaryLight, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4},
-  tagText: {fontSize: 12, color: Colors.primary, fontWeight: '600'},
-  notes:   {fontSize: 13, color: Colors.textSecondary, lineHeight: 18},
+  tag:        {backgroundColor: Colors.primaryLight, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4},
+  tagText:    {fontSize: 12, color: Colors.primary, fontWeight: '600'},
+  memoBox:    {backgroundColor: Colors.background, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 4, minHeight: 40},
+  notes:      {fontSize: 13, color: Colors.textPrimary, lineHeight: 18},
+  notesEmpty: {fontSize: 13, color: Colors.textTertiary, lineHeight: 18, fontStyle: 'italic'},
 });
 
 // ── 날짜 스트립 셀 ────────────────────────────────────────────────────────────
@@ -365,12 +372,9 @@ export const DiaryScreen: React.FC = () => {
 
   return (
     <View style={st.screen}>
-      {/* 헤더 */}
+      {/* 헤더: 월 + 달력 버튼 */}
       <View style={st.header}>
-        <View>
-          <Text style={st.headerMonth}>{getKoreanMonth(selectedDate)}</Text>
-          <Text style={st.headerTitle}>다이어리</Text>
-        </View>
+        <Text style={st.headerMonth}>{getKoreanMonth(selectedDate)}</Text>
         <TouchableOpacity style={st.calBtn} onPress={() => setCalendarVisible(true)} activeOpacity={0.7}>
           <CalendarIcon color={Colors.primary} />
         </TouchableOpacity>
@@ -467,15 +471,14 @@ const st = StyleSheet.create({
   screen: {flex: 1, backgroundColor: Colors.background},
 
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop:  Platform.OS === 'ios' ? 56 : 24,
-    paddingBottom: 12,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop:  Platform.OS === 'ios' ? 8 : 10,
+    paddingBottom: 10,
     backgroundColor: Colors.card,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  headerMonth: {fontSize: 12, color: Colors.textSecondary, marginBottom: 2},
-  headerTitle: {fontSize: 22, fontWeight: '800', color: Colors.textPrimary},
+  headerMonth: {fontSize: 15, fontWeight: '700', color: Colors.textPrimary},
   calBtn:      {padding: 8},
 
   stripWrap: {

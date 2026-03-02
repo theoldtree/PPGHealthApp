@@ -82,9 +82,15 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({
         const userData = await authApi.getCurrentUser();
         setUser(userData);
       }
-    } catch (error) {
-      console.error('Failed to load token:', error);
-      await AsyncStorage.removeItem(TOKEN_KEY);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
+        // Token is invalid or expired — clear it and show login screen
+        await AsyncStorage.removeItem(TOKEN_KEY);
+      }
+      // Network error (server down, no connection): keep the token,
+      // user will re-authenticate when the server is reachable again
+      console.warn('Failed to restore session:', error?.message ?? error);
     } finally {
       setIsLoading(false);
     }

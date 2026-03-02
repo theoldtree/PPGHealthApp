@@ -3,6 +3,15 @@
  */
 
 /**
+ * DEV: Skip authentication entirely (mock login).
+ * true  = bypass login/signup → go straight to main app with a mock user
+ * false = normal auth flow (login / signup required)
+ *
+ * Set to false before production build.
+ */
+export const SKIP_AUTH = true;
+
+/**
  * BLE mode flag.
  * false = mock PPG replay (BUT-PPG dataset, for dev/demo)
  * true  = real BLE sensor (set this when hardware is ready)
