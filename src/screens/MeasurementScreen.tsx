@@ -33,27 +33,37 @@ const batteryColor = (level: number) =>
     ? Colors.statusWarning
     : Colors.statusDanger;
 
-function computeRealtimeMetrics(ppgData: number[], elapsed: number) {
+function computeRealtimeMetrics(ppgData: number[], _elapsed: number) {
   if (ppgData.length < 10) {
     return {hr: null, pi: null, hrv: null, ac: null, dc: null};
   }
-  const recent = ppgData.slice(-30);
+  // Use last 100 samples (≈10 sec at 10 Hz) for more stable estimates
+  const recent = ppgData.slice(-100);
   const maxV = Math.max(...recent);
   const minV = Math.min(...recent);
   const meanV = recent.reduce((a, b) => a + b, 0) / recent.length;
   const ac = maxV - minV;
   const dc = meanV;
   const pi = dc > 0 ? parseFloat(((ac / dc) * 100).toFixed(1)) : null;
+  // Peak detection with minimum spacing (10 samples ≈ 1 sec at 10 Hz)
   let peaks = 0;
+  let lastPeakIdx = -10;
   for (let i = 1; i < recent.length - 1; i++) {
-    if (recent[i] > recent[i - 1] && recent[i] > recent[i + 1] && recent[i] > meanV) {
+    if (
+      i - lastPeakIdx >= 10 &&
+      recent[i] > recent[i - 1] &&
+      recent[i] > recent[i + 1] &&
+      recent[i] > meanV
+    ) {
       peaks++;
+      lastPeakIdx = i;
     }
   }
-  const hrEstimate = peaks > 0 ? Math.round((peaks / (recent.length / 10)) * 60) : null;
+  const windowSecs = recent.length / 10;
+  const hrEstimate = peaks > 0 ? Math.round((peaks / windowSecs) * 60) : null;
   const hr = hrEstimate && hrEstimate > 40 && hrEstimate < 180 ? hrEstimate : null;
-  const hrv = elapsed >= 15 && hr ? Math.round(35 + Math.random() * 15) : null;
-  return {hr, pi, hrv, ac: parseFloat(ac.toFixed(1)), dc: parseFloat(dc.toFixed(1))};
+  // HRV requires full 60s of RR intervals — always show pending during measurement
+  return {hr, pi, hrv: null, ac: parseFloat(ac.toFixed(1)), dc: parseFloat(dc.toFixed(1))};
 }
 
 const BatteryIcon = ({level, color}: {level: number; color: string}) => {
@@ -120,10 +130,11 @@ export const MeasurementScreen: React.FC = () => {
     setShowResult(false);
   };
 
+  // Update metrics once per second (elapsedTime changes at 1 Hz) — not at every sample (10 Hz)
   const metrics = useMemo(
     () => computeRealtimeMetrics(ppgData, elapsedTime),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ppgData.length, elapsedTime],
+    [elapsedTime],
   );
 
   const bColor   = batteryColor(batteryLevel);

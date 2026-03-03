@@ -31,16 +31,18 @@ export interface GeneralAnalysis {
 export interface PersonalComparison {
   heartRateDiff: number;   // +/- from personal baseline
   hrvDiff:       number;
-  trend:         'improving' | 'stable' | 'declining';
+  trend:         'improving' | 'stable' | 'declining' | 'first';
 }
 
 export interface DemographicComparison {
-  percentile:     number;   // 0-100
+  percentile:     number;   // 0-100 (HR percentile vs same age/gender)
   ageGroupAvg:    number;
   genderGroupAvg: number;
   comparison:     'above_average' | 'average' | 'below_average';
   apgBOverARef?:  number;   // Takazawa reference b/a for this age/gender
   apgBOverAStd?:  number;   // std of reference
+  avgHrvSdnn?:    number;   // literature-based HRV SDNN avg for this age group (ms)
+  stdHrvSdnn?:    number;   // std (ms)
 }
 
 export interface MarkedDates {

@@ -159,6 +159,24 @@ export const MeasurementResultScreen: React.FC<Props> = ({record, onSaveAndClose
           />
         </View>
 
+        {/* HRV 집단 대비 */}
+        {demographic.avgHrvSdnn !== undefined && demographic.avgHrvSdnn !== null && (
+          <View style={[st.card, {marginTop: 10}]}>
+            <View style={st.cardHeader}>
+              <Text style={st.cardHeaderTitle}>HRV 집단 대비</Text>
+              <Text style={st.cardHeaderDesc}>동일 연령대 HRV SDNN 기준값 (Task Force 1996)</Text>
+            </View>
+            <DemoRow label="내 HRV"      value={`${general.hrv} ms`} />
+            <DemoRow label="연령대 평균" value={`${demographic.avgHrvSdnn} ms`} />
+            <DemoRow
+              label="차이"
+              value={`${general.hrv - demographic.avgHrvSdnn > 0 ? '+' : ''}${general.hrv - demographic.avgHrvSdnn} ms`}
+              valueColor={general.hrv >= demographic.avgHrvSdnn ? Colors.statusGood : Colors.statusDanger}
+              last
+            />
+          </View>
+        )}
+
         {/* APG b/a 동맥 경직도 */}
         {general.apgBOverA !== undefined && general.apgBOverA !== null && (
           <View style={[st.card, {marginTop: 10}]}>
@@ -201,11 +219,18 @@ export const MeasurementResultScreen: React.FC<Props> = ({record, onSaveAndClose
       {/* ⑤ 개인 대비 분석 */}
       <View style={st.section}>
         <Text style={st.sectionTitle}>개인 대비 분석</Text>
+        {personal.trend === 'first' && (
+          <View style={st.firstMeasurementBanner}>
+            <Text style={st.firstMeasurementText}>
+              첫 번째 측정입니다. 측정을 반복할수록 개인 기준값이 쌓여 변화 추이를 확인할 수 있습니다.
+            </Text>
+          </View>
+        )}
         <View style={st.card}>
           <MetricDetailRow
             label="심박수 변화"
-            value={`${personal.heartRateDiff > 0 ? '+' : ''}${personal.heartRateDiff} bpm`}
-            valueColor={personal.heartRateDiff === 0 ? Colors.textSecondary : personal.heartRateDiff < 0 ? Colors.statusGood : Colors.statusDanger}
+            value={personal.trend === 'first' ? '–' : `${personal.heartRateDiff > 0 ? '+' : ''}${personal.heartRateDiff} bpm`}
+            valueColor={Colors.textSecondary}
             desc="나의 평균 심박수 대비 오늘의 변화량"
           />
           <MetricDetailRow
@@ -499,6 +524,14 @@ const st = StyleSheet.create({
 
   saveBtn:    {backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 16, alignItems: 'center'},
   saveBtnTxt: {fontSize: 16, fontWeight: '700', color: Colors.white},
+
+  firstMeasurementBanner: {
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  firstMeasurementText: {fontSize: 13, color: Colors.primary, lineHeight: 20},
 
   errorText: {fontSize: 16, color: Colors.statusDanger, textAlign: 'center', margin: 32},
 });

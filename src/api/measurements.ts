@@ -57,6 +57,8 @@ export interface AnalysisResponse {
     comparison: string;
     apgBOverARef?: number;
     apgBOverAStd?: number;
+    avgHrvSdnn?: number;
+    stdHrvSdnn?: number;
   };
   advice?: string;
 }
@@ -143,6 +145,30 @@ export const updateBattery = async (
 };
 
 /**
+ * Save pre-computed analysis values directly (used in mock/dev mode to avoid
+ * sending binary-encoded BUT-PPG signal to the backend for re-processing).
+ */
+export const saveMockAnalysis = async (
+  measurementId: number,
+  values: {
+    heart_rate: number;
+    hrv_sdnn: number;
+    hrv_rmssd?: number;
+    pi: number;
+    ac: number;
+    dc: number;
+    apg_b_over_a?: number;
+    apg_ai?: number;
+    status: string;
+    percentile: number;
+    age_group_avg: number;
+    gender_group_avg: number;
+  },
+): Promise<void> => {
+  await apiClient.post(`/api/v1/measurements/${measurementId}/save-analysis`, values);
+};
+
+/**
  * Save diary notes, tags, and advice after viewing the result screen.
  */
 export const saveDiaryEntry = async (
@@ -212,6 +238,8 @@ export const convertAnalysisToRecord = (
           | 'below_average',
         apgBOverARef: analysisData.demographic.apgBOverARef,
         apgBOverAStd: analysisData.demographic.apgBOverAStd,
+        avgHrvSdnn: analysisData.demographic.avgHrvSdnn,
+        stdHrvSdnn: analysisData.demographic.stdHrvSdnn,
       },
     },
   };

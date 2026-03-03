@@ -3,7 +3,8 @@
  *
  * Mode flag: USE_BLE_SENSOR in src/config/measurement.ts
  * ──────────────────────────────────────────────────────
- * false (default) → mock PPG replay from BUT-PPG dataset
+ * false (default) → mock PPG replay simulating real BLE packet structure
+ *                   (10 samples per 50ms packet, 200 Hz, from mock_ppg_data.json)
  * true            → real BLE sensor
  *
  * BLE swap guide (when USE_BLE_SENSOR = true)
@@ -11,8 +12,8 @@
  *   1. Set USE_BLE_SENSOR = true in src/config/measurement.ts
  *   2. Install BLE library (e.g. react-native-ble-plx)
  *   3. Remove the `dataGeneratorRef` setInterval in `startMeasurement`
- *   4. In your BLE notification callback, call:
- *        injectPPGSample(rawValue)   ← exported from this hook
+ *   4. In your BLE notification callback, parse the 24-byte packet and call:
+ *        injectPPGSample(rawValue)   ← call once per sample (10 times per packet)
  *   5. Add BLE connect/disconnect in startMeasurement / stopMeasurement
  *
  * Everything else (QC sender, timer, analysis) stays the same.
@@ -24,6 +25,7 @@ import {
   submitQCData,
   completeMeasurement,
   analyzeMeasurement as apiAnalyzeMeasurement,
+  saveMockAnalysis,
   convertAnalysisToRecord,
 } from '../api/measurements';
 import type {MeasurementRecord} from '../types/measurement';
@@ -34,6 +36,7 @@ import {
   QC_WINDOW_SIZE,
   MIN_DATA_POINTS,
   PPG_SAMPLING_RATE,
+  BLE_SAMPLES_PER_PACKET,
   USE_BLE_SENSOR,
   MIN_MEASUREMENT_SECONDS,
   USE_MOCK_MEASUREMENT,
@@ -42,16 +45,24 @@ import {
 import mockPPGData from '../assets/mock_ppg_data.json';
 
 // ── Mock signal helpers (used when USE_BLE_SENSOR = false) ──────────────────
-const _mockSignalRate: number = (mockPPGData as any).samplingRate; // 300 Hz
+/** Source data rate of mock_ppg_data.json (300 Hz) */
+const _mockSignalRate: number = (mockPPGData as any).samplingRate;
 const _mockMeasurements: Array<{ppgSignal: number[]}> = Object.values(
   (mockPPGData as any).measurements,
 );
-/** Pick a random recording from the BUT-PPG dataset */
+/** Pick a random recording for this session */
 const _pickMockSignal = (): number[] =>
   _mockMeasurements[Math.floor(Math.random() * _mockMeasurements.length)]
     .ppgSignal;
-/** How many source samples to advance per generator tick (300 Hz / 10 Hz = 30) */
-const _samplesPerTick = _mockSignalRate / (1000 / DATA_GENERATION_INTERVAL);
+/**
+ * Source samples to advance per BLE packet tick (300 Hz source → 200 Hz output).
+ * Per 50ms: source spans 300 * 0.05 = 15 samples → resample to 10 output samples.
+ */
+const _sourceSamplesPerPacket = Math.round(_mockSignalRate * DATA_GENERATION_INTERVAL / 1000); // 15
+const _resampleStep = _sourceSamplesPerPacket / BLE_SAMPLES_PER_PACKET; // 1.5
+
+/** Samples shown in chart (last 3 s at 200 Hz = 600 samples) */
+const CHART_DISPLAY_SAMPLES = 600;
 
 // ── Local mock analysis (used when USE_MOCK_MEASUREMENT = true) ────────────────────────
 function _mockAdvice(hr: number, hrv: number): string {
@@ -83,7 +94,7 @@ function _buildMockRecord(signal: number[], duration: number, mId?: number): Mea
       lastPeakIdx = i;
     }
   }
-  const signalDurationS = samples.length / _mockSignalRate;
+  const signalDurationS = samples.length / PPG_SAMPLING_RATE;
   const rawHR = peaks > 0 ? Math.round((peaks / signalDurationS) * 60) : 72;
   const heartRate = rawHR > 40 && rawHR < 180 ? rawHR : 72;
   const hrv = Math.round(25 + Math.random() * 40);
@@ -132,6 +143,8 @@ function _buildMockRecord(signal: number[], duration: number, mId?: number): Mea
         comparison: percentile >= 60 ? 'above_average' : percentile >= 40 ? 'average' : 'below_average',
         apgBOverARef: -0.33,   // Takazawa mock reference (30s age group)
         apgBOverAStd: 0.14,
+        avgHrvSdnn: 44,        // literature avg for 30s age group (Task Force 1996)
+        stdHrvSdnn: 14,
       },
     },
   };
@@ -168,12 +181,15 @@ export const useMeasurement = (
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataGeneratorRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataSenderRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const displayTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const ppgDataRef       = useRef<number[]>([]);
   const measurementIdRef = useRef<number | null>(null);
   const windowIndexRef   = useRef<number>(0);
   const elapsedRef       = useRef<number>(0);
   /** Stores the randomly selected mock PPG signal for the current session */
-  const mockSignalRef    = useRef<number[]>([]);
+  const mockSignalRef       = useRef<number[]>([]);
+  /** Position in mock source signal — advances by _sourceSamplesPerPacket per tick */
+  const sourcePositionRef   = useRef<number>(0);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -181,34 +197,48 @@ export const useMeasurement = (
       if (timerRef.current) clearInterval(timerRef.current);
       if (dataGeneratorRef.current) clearInterval(dataGeneratorRef.current);
       if (dataSenderRef.current) clearInterval(dataSenderRef.current);
+      if (displayTimerRef.current) clearInterval(displayTimerRef.current);
     };
   }, []);
 
   // ── BLE injection point ─────────────────────────────────────────────────────
   /**
-   * Append one PPG sample. Used by both the dummy generator and BLE callbacks.
-   * Keep this as the SINGLE place where data enters ppgData.
+   * Append one PPG sample to the raw buffer.
+   * Used by both the mock packet generator and real BLE callbacks.
+   * O(1) — does NOT trigger a React re-render; chart is updated by displayTimerRef.
    */
   const injectPPGSample = useCallback((value: number) => {
-    setPpgData(prev => {
-      const next = [...prev, value];
-      ppgDataRef.current = next;
-      return next;
-    });
+    ppgDataRef.current.push(value);
   }, []);
 
-  // ── Data generator (mock replay or sin-wave BLE placeholder) ───────────────
+  // ── Data generator (mock BLE packet replay or sin-wave placeholder) ─────────
+  /**
+   * Simulates one BLE packet arrival (50ms interval, 10 samples per packet).
+   *
+   * Mock mode (USE_BLE_SENSOR = false):
+   *   Reads BLE_SAMPLES_PER_PACKET (10) samples from mock_ppg_data.json,
+   *   resampling 300 Hz source → 200 Hz output via linear index stepping.
+   *
+   * BLE mode (USE_BLE_SENSOR = true):
+   *   Remove this interval entirely and call injectPPGSample(rawValue)
+   *   once per sample inside your BLE characteristic notification callback.
+   */
   const generateDummyData = useCallback(() => {
     if (!USE_BLE_SENSOR) {
-      // Mock replay: subsample the BUT-PPG signal to DATA_GENERATION_INTERVAL rate
-      const ticks = ppgDataRef.current.length;
-      const sourceIdx =
-        Math.round(ticks * _samplesPerTick) % mockSignalRef.current.length;
-      injectPPGSample(mockSignalRef.current[sourceIdx] ?? 0);
+      // Mock replay: emit 10 samples resampled from 300 Hz source to 200 Hz
+      const signal = mockSignalRef.current;
+      const srcBase = sourcePositionRef.current;
+      for (let i = 0; i < BLE_SAMPLES_PER_PACKET; i++) {
+        const srcIdx = Math.round(srcBase + i * _resampleStep) % signal.length;
+        injectPPGSample(signal[srcIdx] ?? 0);
+      }
+      sourcePositionRef.current = (srcBase + _sourceSamplesPerPacket) % signal.length;
     } else {
-      // BLE mode: sin-wave placeholder — remove this block when BLE is live
-      const newValue = 70 + Math.sin(Date.now() / 1000) * 10 + Math.random() * 5;
-      injectPPGSample(Math.round(newValue));
+      // BLE placeholder: sin-wave — replace with real BLE when hardware is ready
+      for (let i = 0; i < BLE_SAMPLES_PER_PACKET; i++) {
+        const newValue = 70 + Math.sin(Date.now() / 1000) * 10 + Math.random() * 5;
+        injectPPGSample(Math.round(newValue));
+      }
     }
 
     // Simulate battery drain
@@ -268,24 +298,46 @@ export const useMeasurement = (
 
   // ── Analysis after measurement completes ───────────────────────────────────
   const runAnalysis = useCallback(async (mId: number, duration: number = MEASUREMENT_DURATION) => {
-    // USE_MOCK_MEASUREMENT: build result locally, but still complete in DB for diary save
+    // Step 1: mark measurement completed in DB (always)
+    try { await completeMeasurement(mId, ''); } catch { /* ignore */ }
+
+    // Both BLE and mock modes accumulate data into ppgDataRef at PPG_SAMPLING_RATE (200 Hz)
+    const ppgForAnalysis = ppgDataRef.current.slice();
+    const sampleRate = PPG_SAMPLING_RATE;
+
     if (USE_MOCK_MEASUREMENT) {
-      try { await completeMeasurement(mId, ''); } catch { /* ignore */ }
-      const signal = USE_BLE_SENSOR ? ppgDataRef.current.slice() : mockSignalRef.current;
-      const record = _buildMockRecord(signal, duration, mId);
+      // Step 2a (mock): build result locally for immediate display
+      const record = _buildMockRecord(ppgDataRef.current.slice(), duration, mId);
       onAnalysisComplete(record);
+
+      // Step 2b: save pre-computed mock values to backend asynchronously.
+      // We do NOT re-send the raw PPG signal (which is binary WFDB gain-encoded
+      // and would produce garbage HR/HRV/PI values when re-processed by the backend).
+      if (record.analysis) {
+        const g = record.analysis.general;
+        const d = record.analysis.demographic;
+        saveMockAnalysis(mId, {
+          heart_rate:       g.heartRate,
+          hrv_sdnn:         g.hrv,
+          hrv_rmssd:        g.hrvRmssd,
+          pi:               g.pi,
+          ac:               g.ac,
+          dc:               g.dc,
+          apg_b_over_a:     g.apgBOverA,
+          apg_ai:           g.apgAI,
+          status:           g.status,
+          percentile:       d.percentile,
+          age_group_avg:    d.ageGroupAvg,
+          gender_group_avg: d.genderGroupAvg,
+        }).catch(err => {
+          console.warn('Background mock analysis save failed:', err);
+        });
+      }
       return;
     }
 
+    // Step 2 (real mode): wait for backend analysis and use its result
     try {
-      await completeMeasurement(mId, '');
-
-      // BLE mode: use the samples collected during recording at PPG_SAMPLING_RATE
-      // Mock mode: use the full 300 Hz BUT-PPG signal for accurate HR/HRV analysis
-      const [ppgForAnalysis, sampleRate] = USE_BLE_SENSOR
-        ? [ppgDataRef.current.slice(), PPG_SAMPLING_RATE]
-        : [mockSignalRef.current, _mockSignalRate];
-
       const analysisData = await apiAnalyzeMeasurement(
         mId,
         ppgForAnalysis,
@@ -317,10 +369,19 @@ export const useMeasurement = (
       setPpgData([]);
       ppgDataRef.current = [];
 
-      // Mock mode: pick a random BUT-PPG recording for this session
+      // Mock mode: pick a random recording and reset source position
       if (!USE_BLE_SENSOR) {
         mockSignalRef.current = _pickMockSignal();
+        sourcePositionRef.current = 0;
       }
+
+      // Display timer: updates chart at 10 Hz showing the last CHART_DISPLAY_SAMPLES
+      displayTimerRef.current = setInterval(() => {
+        const buf = ppgDataRef.current;
+        setPpgData(buf.length > CHART_DISPLAY_SAMPLES
+          ? buf.slice(-CHART_DISPLAY_SAMPLES)
+          : buf.slice());
+      }, 100);
 
       // Timer
       timerRef.current = setInterval(() => {
@@ -335,9 +396,9 @@ export const useMeasurement = (
       }, 1000);
 
       // ── Data generator ────────────────────────────────────────────────────
-      // Mock mode: replays BUT-PPG signal (see generateDummyData)
-      // BLE mode (USE_BLE_SENSOR = true): remove this block and subscribe to
-      //   BLE notifications instead → call injectPPGSample(rawValue)
+      // Mock mode: simulates BLE packets (10 samples per 50ms, 200 Hz)
+      // BLE mode (USE_BLE_SENSOR = true): remove this block, subscribe to
+      //   BLE notifications, parse 24-byte packet → call injectPPGSample(v)
       dataGeneratorRef.current = setInterval(() => {
         generateDummyData();
       }, DATA_GENERATION_INTERVAL);
@@ -358,9 +419,11 @@ export const useMeasurement = (
     if (timerRef.current) clearInterval(timerRef.current);
     if (dataGeneratorRef.current) clearInterval(dataGeneratorRef.current);
     if (dataSenderRef.current) clearInterval(dataSenderRef.current);
+    if (displayTimerRef.current) clearInterval(displayTimerRef.current);
     timerRef.current = null;
     dataGeneratorRef.current = null;
     dataSenderRef.current = null;
+    displayTimerRef.current = null;
     setIsRecording(false);
 
     const mId = measurementIdRef.current;
@@ -379,9 +442,11 @@ export const useMeasurement = (
       if (timerRef.current) clearInterval(timerRef.current);
       if (dataGeneratorRef.current) clearInterval(dataGeneratorRef.current);
       if (dataSenderRef.current) clearInterval(dataSenderRef.current);
+      if (displayTimerRef.current) clearInterval(displayTimerRef.current);
       timerRef.current = null;
       dataGeneratorRef.current = null;
       dataSenderRef.current = null;
+      displayTimerRef.current = null;
       setIsRecording(false);
     };
 

@@ -17,9 +17,6 @@ import Svg, {Path} from 'react-native-svg';
 import {Colors, StatusColors, StatusLabels} from '../config/colors';
 import type {MeasurementRecord} from '../types/measurement';
 import {getMeasurementHistory} from '../api/measurements';
-import mockData from '../assets/mock_ppg_data.json';
-
-const MOCK_RECORDS: MeasurementRecord[] = (mockData as any).measurements as MeasurementRecord[];
 
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 const DAY_KOR = ['일', '월', '화', '수', '목', '금', '토'];
@@ -185,11 +182,11 @@ const RecordCard = ({record}: {record: MeasurementRecord}) => {
             <CompareRow label="HRV"   diff={analysis.personal.hrvDiff}        unit="ms"  higherIsBetter={true}  />
           </View>
 
-          {/* 집단 대비 */}
+          {/* 집단 대비 — 심박수 */}
           <Text style={cardSt.secTitle}>동일 연령대 비교</Text>
           <View style={cardSt.box}>
             <View style={{flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 2}}>
-              <Text style={cardSt.secTitle}>상위</Text>
+              <Text style={cardSt.secTitle}>HR 상위</Text>
               <Text style={[{fontSize: 26, fontWeight: '800'}, {color: statusColor}]}>
                 {analysis.demographic.percentile}%
               </Text>
@@ -199,6 +196,21 @@ const RecordCard = ({record}: {record: MeasurementRecord}) => {
               ageAvg={analysis.demographic.ageGroupAvg}
               myHR={analysis.general.heartRate}
             />
+            {/* HRV 집단 대비 */}
+            {analysis.demographic.avgHrvSdnn !== undefined && analysis.demographic.avgHrvSdnn !== null && (
+              <View style={{marginTop: 8, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 8}}>
+                <Text style={[cardSt.secTitle, {marginBottom: 4}]}>HRV 연령대 기준 ({analysis.demographic.avgHrvSdnn} ms 평균)</Text>
+                <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                  <Text style={{fontSize: 12, color: Colors.textSecondary}}>내 HRV</Text>
+                  <Text style={{
+                    fontSize: 13, fontWeight: '700',
+                    color: analysis.general.hrv >= analysis.demographic.avgHrvSdnn ? Colors.statusGood : Colors.statusDanger,
+                  }}>
+                    {analysis.general.hrv} ms {analysis.general.hrv >= analysis.demographic.avgHrvSdnn ? '▲' : '▼'} {Math.abs(analysis.general.hrv - analysis.demographic.avgHrvSdnn)} ms
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
           {/* 조언 */}
@@ -318,7 +330,7 @@ const CalendarIcon = ({color}: {color: string}) => (
 export const DiaryScreen: React.FC = () => {
   const [selectedDate, setSelectedDate]       = useState(TODAY);
   const [calendarVisible, setCalendarVisible] = useState(false);
-  const [allRecords, setAllRecords]           = useState<MeasurementRecord[]>(MOCK_RECORDS);
+  const [allRecords, setAllRecords]           = useState<MeasurementRecord[]>([]);
   const [isLoading, setIsLoading]             = useState(false);
 
   const dateRange = useMemo(() => buildDateRange(TODAY), []);

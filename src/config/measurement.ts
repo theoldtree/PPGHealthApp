@@ -45,14 +45,17 @@ export const MIN_MEASUREMENT_SECONDS = 15;
 // Data transmission interval to server (ms)
 export const DATA_SEND_INTERVAL = 1000; // 1 second
 
-// Data generation interval for dummy data (ms)
-export const DATA_GENERATION_INTERVAL = 100; // 100ms = 10Hz
+// BLE packet interval (ms) — one packet = BLE_SAMPLES_PER_PACKET samples
+export const DATA_GENERATION_INTERVAL = 50; // 50ms = 20 packets/sec
 
-// PPG sensor sampling rate (Hz)
-export const PPG_SAMPLING_RATE = 200; // 200Hz (10 samples/packet × 20 packets/sec)
+// Samples per BLE packet (matches hardware spec: 10 × 2-byte samples per 24-byte packet)
+export const BLE_SAMPLES_PER_PACKET = 10;
 
-// QC window size (number of samples)
-export const QC_WINDOW_SIZE = 400; // 2 seconds at 200Hz
+// PPG sensor sampling rate (Hz): 10 samples/packet × 20 packets/sec = 200 Hz
+export const PPG_SAMPLING_RATE = 200;
+
+// QC window size (number of samples): 2 seconds at 200 Hz
+export const QC_WINDOW_SIZE = 400;
 
 // Minimum data points required before sending
 export const MIN_DATA_POINTS = 10;

@@ -81,7 +81,11 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJ5amVvbmdtdUBnbWFpbC5jb20iLCJleHAiOjE4MDM5OTAzMDJ9.jiUpDNBkj3MoYhitcfp-mkAdF10pMTmtRkBWx204ens\")",
       "Bash(__NEW_LINE_0a7c432b3f9ffb19__ echo \"\")",
       "Bash(alembic revision --autogenerate -m \"add_is_dev_to_measurements\")",
-      "Bash(alembic stamp 959e7bb7abf2)"
+      "Bash(alembic stamp 959e7bb7abf2)",
+      "Bash(venv/bin/python3 -:*)",
+      "Bash(venv/bin/python3 -m alembic upgrade head)",
+      "Bash(sqlite3 /Users/yujeongmu/Desktop/ppg-backend/test.db \"SELECT COUNT\\(*\\) FROM notifications; SELECT id, user_id, type, title, is_read FROM notifications LIMIT 10;\")",
+      "Bash(sqlite3 /Users/yujeongmu/Desktop/ppg-backend/test.db \"DELETE FROM notifications; SELECT COUNT\\(*\\) FROM notifications;\")"
     ]
   }
 }
