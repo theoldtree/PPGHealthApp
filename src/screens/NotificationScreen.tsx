@@ -10,6 +10,7 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../config/colors';
 import type {Notification, NotificationType} from '../types/measurement';
+import {useNotificationContext} from '../context/NotificationContext';
 import {
   getNotifications,
   markNotificationRead,
@@ -125,19 +126,22 @@ const NotifCard = ({
 
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 export const NotificationScreen: React.FC = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const {localNotifications, clearLocalNotifications, markLocalRead, markAllLocalRead} = useNotificationContext();
+  const [backendNotifications, setBackendNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
       const data = await getNotifications();
-      setNotifications(data.map(toNotification));
+      setBackendNotifications(data.map(toNotification));
+      // Backend loaded successfully — clear local duplicates
+      clearLocalNotifications();
     } catch {
-      // silently fail — keep previous data
+      // silently fail — local notifications still shown
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [clearLocalNotifications]);
 
   useFocusEffect(
     useCallback(() => {
@@ -146,8 +150,17 @@ export const NotificationScreen: React.FC = () => {
     }, [load]),
   );
 
+  // Merge: local first (newest), then backend; sort by createdAt desc
+  const notifications = [...localNotifications, ...backendNotifications].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
   const handleMarkRead = async (id: string) => {
-    setNotifications(prev =>
+    if (id.startsWith('local_')) {
+      markLocalRead(id);
+      return;
+    }
+    setBackendNotifications(prev =>
       prev.map(n => n.id === id ? {...n, isRead: true} : n),
     );
     try {
@@ -156,7 +169,8 @@ export const NotificationScreen: React.FC = () => {
   };
 
   const handleMarkAllRead = async () => {
-    setNotifications(prev => prev.map(n => ({...n, isRead: true})));
+    markAllLocalRead();
+    setBackendNotifications(prev => prev.map(n => ({...n, isRead: true})));
     try {
       await markAllNotificationsRead();
     } catch { /* optimistic update already applied */ }

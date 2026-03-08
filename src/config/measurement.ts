@@ -48,11 +48,21 @@ export const DATA_SEND_INTERVAL = 1000; // 1 second
 // BLE packet interval (ms) — one packet = BLE_SAMPLES_PER_PACKET samples
 export const DATA_GENERATION_INTERVAL = 50; // 50ms = 20 packets/sec
 
-// Samples per BLE packet (matches hardware spec: 10 × 2-byte samples per 24-byte packet)
-export const BLE_SAMPLES_PER_PACKET = 10;
+/**
+ * BLE packet layout (20 bytes total):
+ *   [0]    Sync  (1 byte)  — 0xAA
+ *   [1–2]  Index (2 bytes) — uint16 LE, increments per packet
+ *   [3–17] PPG   (15 bytes)— 12 × 10-bit ADC values, MSB-first bit-packed
+ *   [18]   BAT   (1 byte)  — battery level (0–100 %)
+ *   [19]   CRC   (1 byte)  — XOR of bytes 0–18
+ */
+export const BLE_PACKET_SIZE      = 20;   // total bytes per BLE packet
+export const BLE_PPG_FIELD_SIZE   = 15;   // PPG field bytes (12 × 10-bit)
+// Samples per BLE packet: 12 measurements packed into 15 bytes (12 × 10bit = 120bit)
+export const BLE_SAMPLES_PER_PACKET = 12;
 
-// PPG sensor sampling rate (Hz): 10 samples/packet × 20 packets/sec = 200 Hz
-export const PPG_SAMPLING_RATE = 200;
+// PPG sensor sampling rate (Hz): 12 samples/packet × 20 packets/sec = 240 Hz
+export const PPG_SAMPLING_RATE = 240;
 
 // QC window size (number of samples): 2 seconds at 200 Hz
 export const QC_WINDOW_SIZE = 400;

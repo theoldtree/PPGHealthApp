@@ -29,6 +29,7 @@ import {
   convertAnalysisToRecord,
 } from '../api/measurements';
 import type {MeasurementRecord} from '../types/measurement';
+import {saveLocalRecord} from '../utils/localCache';
 import {
   MEASUREMENT_DURATION,
   DATA_SEND_INTERVAL,
@@ -37,6 +38,8 @@ import {
   MIN_DATA_POINTS,
   PPG_SAMPLING_RATE,
   BLE_SAMPLES_PER_PACKET,
+  BLE_PACKET_SIZE,
+  BLE_PPG_FIELD_SIZE,
   USE_BLE_SENSOR,
   MIN_MEASUREMENT_SECONDS,
   USE_MOCK_MEASUREMENT,
@@ -63,6 +66,113 @@ const _resampleStep = _sourceSamplesPerPacket / BLE_SAMPLES_PER_PACKET; // 1.5
 
 /** Samples shown in chart (last 3 s at 200 Hz = 600 samples) */
 const CHART_DISPLAY_SAMPLES = 600;
+
+// ── BLE packet codec (mock and real sensor share the same parser) ─────────────
+/**
+ * 20-byte BLE PPG packet layout (루트스 BLE hardware spec):
+ *   [0]     Sync  — 0xAA (1 byte)
+ *   [1–2]   Index — uint16 LE, increments per packet (2 bytes)
+ *   [3–17]  PPG   — 12 × 10-bit ADC values, MSB-first bit-packed (15 bytes)
+ *   [18]    BAT   — battery level 0–100 % (1 byte)
+ *   [19]    CRC   — XOR of bytes 0–18 (1 byte)
+ *
+ * Real BLE mode:
+ *   BLE characteristic notification callback receives the raw 20-byte packet
+ *   → call injectBLEPacket(packet).  The hook parses it and feeds each of the
+ *   12 ADC samples into ppgDataRef.
+ *
+ * Mock mode:
+ *   generateDummyData takes 12 floats from mock_ppg_data.json, encodes them
+ *   into this exact 20-byte format via _buildBLEPacket, then calls
+ *   injectBLEPacket — same code path as real BLE.
+ */
+const BLE_SYNC_BYTE = 0xAA;
+
+/**
+ * BUT-PPG dataset is 0–1 normalized (AC only, mean ≈ 0.168).
+ * To simulate realistic 10-bit ADC output:
+ *   ADC = DC_OFFSET + (float − float_mean) × AC_SCALE
+ *   DC_OFFSET = 512  (mid-scale, typical reflectance PPG baseline)
+ *   AC_SCALE  = 25   → peak-to-peak AC ≈ 25 ADC counts → PI ≈ 4.9%
+ *   (real fingertip PPG PI ≈ 1–10 %; 4.9 % is physiologically plausible)
+ */
+const _MOCK_ADC_DC     = 512;    // 10-bit mid-scale DC baseline
+const _MOCK_ADC_AC     = 25;     // ADC counts per unit deviation from signal mean
+const _MOCK_FLOAT_MEAN = 0.168;  // empirical mean of BUT-PPG normalized signal
+
+/**
+ * Parse a 20-byte BLE PPG packet.
+ * Returns { samples: 12 ADC values (0–1023), battery: 0–100 } or null on error.
+ */
+function parseBLEPacket(
+  packet: Uint8Array,
+): {samples: number[]; battery: number} | null {
+  if (packet.length !== BLE_PACKET_SIZE) {return null;}
+  if (packet[0] !== BLE_SYNC_BYTE)       {return null;}
+
+  // CRC check: XOR of bytes 0–18 must equal byte 19
+  let crc = 0;
+  for (let i = 0; i < BLE_PACKET_SIZE - 1; i++) {crc ^= packet[i];}
+  if (crc !== packet[BLE_PACKET_SIZE - 1]) {return null;}
+
+  // Unpack 12 × 10-bit samples from 15-byte PPG field (MSB first)
+  const ppgStart = 3; // after sync(1) + index(2)
+  const samples: number[] = [];
+  let bitBuf = 0;
+  let bitsAvail = 0;
+  for (let b = 0; b < BLE_PPG_FIELD_SIZE; b++) {
+    bitBuf = (bitBuf << 8) | packet[ppgStart + b];
+    bitsAvail += 8;
+    while (bitsAvail >= 10) {
+      bitsAvail -= 10;
+      samples.push((bitBuf >> bitsAvail) & 0x3FF);
+    }
+  }
+
+  const battery = packet[18];
+  return {samples, battery};
+}
+
+/**
+ * Build a mock 20-byte BLE packet.
+ * adcSamples: 12 values in 0–1023 (10-bit).
+ * index: packet counter (uint16, wraps).
+ * battery: 0–100 %.
+ */
+function _buildBLEPacket(
+  adcSamples: number[],
+  index: number,
+  battery: number,
+): Uint8Array {
+  const pkt = new Uint8Array(BLE_PACKET_SIZE);
+  pkt[0] = BLE_SYNC_BYTE;
+  pkt[1] = index & 0xFF;
+  pkt[2] = (index >> 8) & 0xFF;
+
+  // Pack 12 × 10-bit MSB-first into 15-byte PPG field
+  let bitBuf = 0;
+  let bitsBuffered = 0;
+  let byteIdx = 3;
+  for (let i = 0; i < BLE_SAMPLES_PER_PACKET; i++) {
+    const v = Math.max(0, Math.min(0x3FF, adcSamples[i] ?? 0));
+    bitBuf = (bitBuf << 10) | v;
+    bitsBuffered += 10;
+    while (bitsBuffered >= 8) {
+      bitsBuffered -= 8;
+      pkt[byteIdx++] = (bitBuf >> bitsBuffered) & 0xFF;
+    }
+  }
+  // Flush remaining bits (15 bytes × 8 = 120 bits, 12 × 10 = 120 bits → no remainder)
+
+  pkt[18] = Math.max(0, Math.min(100, battery));
+
+  // CRC: XOR of bytes 0–18
+  let crc = 0;
+  for (let i = 0; i < BLE_PACKET_SIZE - 1; i++) {crc ^= pkt[i];}
+  pkt[19] = crc;
+
+  return pkt;
+}
 
 // ── Local mock analysis (used when USE_MOCK_MEASUREMENT = true) ────────────────────────
 function _mockAdvice(hr: number, hrv: number): string {
@@ -158,8 +268,13 @@ export interface UseMeasurementResult {
   qcFeedback: string;
   qcIsAcceptable: boolean;
   progress: number;
-  /** BLE hook-in: call this from BLE notification callback with each sample value */
-  injectPPGSample: (value: number) => void;
+  /**
+   * BLE packet injection point.
+   * Call this from the BLE characteristic notification callback with the raw
+   * 20-byte packet bytes. In mock mode this is called internally with the
+   * same packet format built from mock_ppg_data.json.
+   */
+  injectBLEPacket: (packet: Uint8Array) => void;
   startMeasurement: () => Promise<void>;
   stopMeasurement: () => void;
   cancelMeasurement: () => void;
@@ -190,6 +305,8 @@ export const useMeasurement = (
   const mockSignalRef       = useRef<number[]>([]);
   /** Position in mock source signal — advances by _sourceSamplesPerPacket per tick */
   const sourcePositionRef   = useRef<number>(0);
+  /** BLE packet Index field (uint16, wraps 0–65535) */
+  const packetIndexRef      = useRef<number>(0);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -201,51 +318,75 @@ export const useMeasurement = (
     };
   }, []);
 
-  // ── BLE injection point ─────────────────────────────────────────────────────
+  // ── BLE injection points ─────────────────────────────────────────────────────
   /**
-   * Append one PPG sample to the raw buffer.
-   * Used by both the mock packet generator and real BLE callbacks.
-   * O(1) — does NOT trigger a React re-render; chart is updated by displayTimerRef.
+   * Internal: append one ADC sample to the raw buffer.
+   * Called only from injectBLEPacket after parsing.
+   * O(1) — no re-render; chart is updated by displayTimerRef.
    */
   const injectPPGSample = useCallback((value: number) => {
     ppgDataRef.current.push(value);
   }, []);
 
-  // ── Data generator (mock BLE packet replay or sin-wave placeholder) ─────────
   /**
-   * Simulates one BLE packet arrival (50ms interval, 10 samples per packet).
+   * Public BLE hook-in — call this with the raw 20-byte packet from the BLE
+   * characteristic notification callback.
+   *
+   * Parses sync, index, 12×10-bit PPG samples, battery, and CRC.
+   * On CRC error the packet is silently discarded.
+   * In real BLE mode (USE_BLE_SENSOR=true) battery level is read from the packet.
+   * In mock mode the packet is built by generateDummyData in the same format.
+   */
+  const injectBLEPacket = useCallback((packet: Uint8Array) => {
+    const result = parseBLEPacket(packet);
+    if (!result) {return;}
+    result.samples.forEach(s => injectPPGSample(s));
+    if (USE_BLE_SENSOR) {
+      setBatteryLevel(result.battery);
+    }
+  }, [injectPPGSample]);
+
+  // ── Data generator (mock BLE packet replay or placeholder) ───────────────────
+  /**
+   * Simulates one BLE packet arrival every DATA_GENERATION_INTERVAL ms (50ms).
+   * 12 samples per packet × 20 packets/sec = 240 Hz output.
    *
    * Mock mode (USE_BLE_SENSOR = false):
-   *   Reads BLE_SAMPLES_PER_PACKET (10) samples from mock_ppg_data.json,
-   *   resampling 300 Hz source → 200 Hz output via linear index stepping.
+   *   Reads 12 samples from mock_ppg_data.json (300 Hz source → 240 Hz output,
+   *   _sourceSamplesPerPacket = 15 source frames per tick, step = 1.25).
+   *   Encodes each float to 10-bit ADC, packs into a 20-byte BLE packet,
+   *   then calls injectBLEPacket — identical parse path to real hardware.
    *
    * BLE mode (USE_BLE_SENSOR = true):
-   *   Remove this interval entirely and call injectPPGSample(rawValue)
-   *   once per sample inside your BLE characteristic notification callback.
+   *   Remove this interval entirely. Subscribe to the BLE characteristic and
+   *   call injectBLEPacket(rawBytes) in the notification callback.
    */
   const generateDummyData = useCallback(() => {
     if (!USE_BLE_SENSOR) {
-      // Mock replay: emit 10 samples resampled from 300 Hz source to 200 Hz
-      const signal = mockSignalRef.current;
+      // Encode 12 mock float samples → 10-bit ADC → 20-byte BLE packet
+      const signal  = mockSignalRef.current;
       const srcBase = sourcePositionRef.current;
+      const adcSamples: number[] = [];
       for (let i = 0; i < BLE_SAMPLES_PER_PACKET; i++) {
         const srcIdx = Math.round(srcBase + i * _resampleStep) % signal.length;
-        injectPPGSample(signal[srcIdx] ?? 0);
+        const f = signal[srcIdx] ?? _MOCK_FLOAT_MEAN;
+        // Map float → 10-bit ADC: center at DC_OFFSET, scale AC deviation
+        const adc = Math.round(_MOCK_ADC_DC + (f - _MOCK_FLOAT_MEAN) * _MOCK_ADC_AC);
+        adcSamples.push(Math.max(0, Math.min(0x3FF, adc)));
       }
+      const idx = packetIndexRef.current;
+      const pkt = _buildBLEPacket(adcSamples, idx, 100 /* battery in mock */);
+      packetIndexRef.current = (idx + 1) & 0xFFFF;
+      injectBLEPacket(pkt);
       sourcePositionRef.current = (srcBase + _sourceSamplesPerPacket) % signal.length;
-    } else {
-      // BLE placeholder: sin-wave — replace with real BLE when hardware is ready
-      for (let i = 0; i < BLE_SAMPLES_PER_PACKET; i++) {
-        const newValue = 70 + Math.sin(Date.now() / 1000) * 10 + Math.random() * 5;
-        injectPPGSample(Math.round(newValue));
-      }
     }
+    // USE_BLE_SENSOR = true: no data generation; real packets arrive via injectBLEPacket
 
-    // Simulate battery drain
-    if (Math.random() < 0.01) {
+    // Simulate battery drain in mock mode
+    if (!USE_BLE_SENSOR && Math.random() < 0.01) {
       setBatteryLevel(prev => Math.max(0, prev - 1));
     }
-  }, [injectPPGSample]);
+  }, [injectBLEPacket]);
 
   // ── QC sender (uses ref to avoid stale closure) ────────────────────────────
   const sendDataToServer = useCallback(async () => {
@@ -310,7 +451,10 @@ export const useMeasurement = (
       const record = _buildMockRecord(ppgDataRef.current.slice(), duration, mId);
       onAnalysisComplete(record);
 
-      // Step 2b: save pre-computed mock values to backend asynchronously.
+      // Step 2b-local: cache immediately to AsyncStorage (works even without backend)
+      saveLocalRecord(record).catch(() => {/* silent */});
+
+      // Step 2c: save pre-computed mock values to backend asynchronously.
       // We do NOT re-send the raw PPG signal (which is binary WFDB gain-encoded
       // and would produce garbage HR/HRV/PI values when re-processed by the backend).
       if (record.analysis) {
@@ -373,6 +517,7 @@ export const useMeasurement = (
       if (!USE_BLE_SENSOR) {
         mockSignalRef.current = _pickMockSignal();
         sourcePositionRef.current = 0;
+        packetIndexRef.current = 0;
       }
 
       // Display timer: updates chart at 10 Hz showing the last CHART_DISPLAY_SAMPLES
@@ -512,7 +657,7 @@ export const useMeasurement = (
     qcFeedback,
     qcIsAcceptable,
     progress,
-    injectPPGSample,
+    injectBLEPacket,
     startMeasurement,
     stopMeasurement,
     cancelMeasurement,

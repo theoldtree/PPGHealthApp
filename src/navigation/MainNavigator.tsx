@@ -2,6 +2,8 @@ import React from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import Svg, {Path, Polyline, Line, Circle} from 'react-native-svg';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useNotificationContext} from '../context/NotificationContext';
+import {Colors} from '../config/colors';
 import {MeasurementScreen} from '../screens/MeasurementScreen';
 import {DiaryScreen} from '../screens/DiaryScreen';
 import {MyPageScreen} from '../screens/MyPageScreen';
@@ -102,6 +104,7 @@ const PersonIcon = ({color}: {color: string}) => (
 
 export const MainNavigator: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const {unreadCount} = useNotificationContext();
   const TAB_BAR_BASE = 64;
   const tabBarHeight = TAB_BAR_BASE + insets.bottom;
 
@@ -149,6 +152,8 @@ export const MainNavigator: React.FC = () => {
         options={{
           title: '알림',
           tabBarIcon: ({color}) => <BellIcon color={color} />,
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: {backgroundColor: Colors.statusDanger, fontSize: 10},
         }}
       />
       <Tab.Screen

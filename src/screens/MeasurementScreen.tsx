@@ -20,6 +20,7 @@ import {
 } from '../config/measurement';
 import {useMeasurement} from '../hooks/useMeasurement';
 import {useAuth} from '../context/AuthContext';
+import {useNotificationContext} from '../context/NotificationContext';
 import {saveDiaryEntry} from '../api/measurements';
 import {Colors} from '../config/colors';
 import Svg, {Rect} from 'react-native-svg';
@@ -105,6 +106,7 @@ const ms = StyleSheet.create({
 export const MeasurementScreen: React.FC = () => {
   const {user} = useAuth();
   const userId = user?.id ?? 1;
+  const {addLocalNotification} = useNotificationContext();
   const [showResult, setShowResult] = useState(false);
   const [measurementResult, setMeasurementResult] = useState<MeasurementRecord | null>(null);
 
@@ -113,6 +115,16 @@ export const MeasurementScreen: React.FC = () => {
     useMeasurement(userId, (result: MeasurementRecord) => {
       setMeasurementResult(result);
       setShowResult(true);
+      if (result.analysis) {
+        const g = result.analysis.general;
+        const d = result.analysis.demographic;
+        addLocalNotification({
+          type: 'measurement_complete',
+          title: '측정 완료',
+          body: `심박수 ${g.heartRate} bpm · 상위 ${d.percentile}%`,
+          data: {heartRate: g.heartRate, percentile: d.percentile, status: g.status},
+        });
+      }
     });
 
   const handleSaveAndClose = async (notes: string, tags: string[]) => {

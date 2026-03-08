@@ -1,4 +1,4 @@
-import React, {useState, useRef, useCallback, useMemo, useEffect} from 'react';
+import React, {useState, useRef, useCallback, useMemo} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {
   View,
@@ -17,6 +17,8 @@ import Svg, {Path} from 'react-native-svg';
 import {Colors, StatusColors, StatusLabels} from '../config/colors';
 import type {MeasurementRecord} from '../types/measurement';
 import {getMeasurementHistory} from '../api/measurements';
+import {METRIC_GUIDES} from '../config/guides';
+import {getLocalRecords} from '../utils/localCache';
 
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 const DAY_KOR = ['일', '월', '화', '수', '목', '금', '토'];
@@ -316,7 +318,7 @@ const cellSt = StyleSheet.create({
   cntActive:  {color: Colors.primary, fontWeight: '600'},
 });
 
-// ── 달력 SVG 아이콘 ───────────────────────────────────────────────────────────
+// ── SVG 아이콘들 ──────────────────────────────────────────────────────────────
 const CalendarIcon = ({color}: {color: string}) => (
   <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
     <Path
@@ -326,10 +328,92 @@ const CalendarIcon = ({color}: {color: string}) => (
   </Svg>
 );
 
+const BookIcon = ({color}: {color: string}) => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"
+      stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+    />
+    <Path
+      d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"
+      stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+// ── 지표 가이드북 모달 ────────────────────────────────────────────────────────
+const GuideModal = ({visible, onClose}: {visible: boolean; onClose: () => void}) => (
+  <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Pressable style={gdSt.overlay} onPress={onClose}>
+      <Pressable style={gdSt.sheet} onPress={e => e.stopPropagation()}>
+        <View style={gdSt.handle} />
+        <Text style={gdSt.sheetTitle}>지표 가이드북</Text>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {METRIC_GUIDES.map(guide => (
+            <View key={guide.key} style={gdSt.guideCard}>
+              <View style={gdSt.guideTitleRow}>
+                <Text style={gdSt.guideTitle}>{guide.title}</Text>
+                {guide.unit ? <Text style={gdSt.guideUnit}>{guide.unit}</Text> : null}
+              </View>
+              <Text style={gdSt.guideDesc}>{guide.description}</Text>
+              <View style={gdSt.rangeSection}>
+                {guide.ranges.map((r, i) => (
+                  <View key={i} style={gdSt.rangeRow}>
+                    <View style={[gdSt.rangeDot, {backgroundColor: r.color}]} />
+                    <Text style={gdSt.rangeLabel}>{r.label}</Text>
+                    <Text style={gdSt.rangeDesc}>{r.desc}</Text>
+                  </View>
+                ))}
+              </View>
+              {guide.reference && (
+                <Text style={gdSt.reference}>출처: {guide.reference}</Text>
+              )}
+            </View>
+          ))}
+          <View style={{height: 32}} />
+        </ScrollView>
+        <TouchableOpacity style={gdSt.closeBtn} onPress={onClose} activeOpacity={0.8}>
+          <Text style={gdSt.closeBtnTxt}>닫기</Text>
+        </TouchableOpacity>
+      </Pressable>
+    </Pressable>
+  </Modal>
+);
+
+const gdSt = StyleSheet.create({
+  overlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end'},
+  sheet: {
+    backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, maxHeight: '88%',
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border,
+    alignSelf: 'center', marginBottom: 16,
+  },
+  sheetTitle: {fontSize: 18, fontWeight: '800', color: Colors.textPrimary, marginBottom: 16},
+  guideCard: {
+    backgroundColor: Colors.background, borderRadius: 14,
+    padding: 14, marginBottom: 12,
+  },
+  guideTitleRow: {flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 6},
+  guideTitle:    {fontSize: 15, fontWeight: '700', color: Colors.textPrimary},
+  guideUnit:     {fontSize: 12, color: Colors.textTertiary},
+  guideDesc:     {fontSize: 13, color: Colors.textSecondary, lineHeight: 20, marginBottom: 10},
+  rangeSection:  {gap: 6},
+  rangeRow:      {flexDirection: 'row', alignItems: 'center', gap: 6},
+  rangeDot:      {width: 7, height: 7, borderRadius: 3.5, flexShrink: 0},
+  rangeLabel:    {fontSize: 11, fontWeight: '700', color: Colors.textPrimary, width: 76},
+  rangeDesc:     {fontSize: 11, color: Colors.textSecondary, flex: 1},
+  reference:     {fontSize: 10, color: Colors.textTertiary, marginTop: 8, fontStyle: 'italic'},
+  closeBtn:      {backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 8},
+  closeBtnTxt:   {fontSize: 15, fontWeight: '700', color: Colors.white},
+});
+
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 export const DiaryScreen: React.FC = () => {
   const [selectedDate, setSelectedDate]       = useState(TODAY);
   const [calendarVisible, setCalendarVisible] = useState(false);
+  const [guideVisible, setGuideVisible]       = useState(false);
   const [allRecords, setAllRecords]           = useState<MeasurementRecord[]>([]);
   const [isLoading, setIsLoading]             = useState(false);
 
@@ -347,7 +431,11 @@ export const DiaryScreen: React.FC = () => {
             setAllRecords(history);
           }
         } catch {
-          // Backend not available — keep mock data
+          // Backend not available — fall back to local cache
+          const cached = await getLocalRecords();
+          if (cached.length > 0) {
+            setAllRecords(cached);
+          }
         } finally {
           setIsLoading(false);
         }
@@ -392,12 +480,17 @@ export const DiaryScreen: React.FC = () => {
 
   return (
     <View style={st.screen}>
-      {/* 헤더: 월 + 달력 버튼 */}
+      {/* 헤더: 월 + 가이드북 버튼 + 달력 버튼 */}
       <View style={st.header}>
         <Text style={st.headerMonth}>{getKoreanMonth(selectedDate)}</Text>
-        <TouchableOpacity style={st.calBtn} onPress={() => setCalendarVisible(true)} activeOpacity={0.7}>
-          <CalendarIcon color={Colors.primary} />
-        </TouchableOpacity>
+        <View style={st.headerBtns}>
+          <TouchableOpacity style={st.calBtn} onPress={() => setGuideVisible(true)} activeOpacity={0.7}>
+            <BookIcon color={Colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={st.calBtn} onPress={() => setCalendarVisible(true)} activeOpacity={0.7}>
+            <CalendarIcon color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* 날짜 스트립 */}
@@ -449,6 +542,9 @@ export const DiaryScreen: React.FC = () => {
         <View style={{height: 32}} />
       </ScrollView>
 
+      {/* 지표 가이드북 모달 */}
+      <GuideModal visible={guideVisible} onClose={() => setGuideVisible(false)} />
+
       {/* 달력 모달 */}
       <Modal
         visible={calendarVisible}
@@ -499,6 +595,7 @@ const st = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   headerMonth: {fontSize: 15, fontWeight: '700', color: Colors.textPrimary},
+  headerBtns:  {flexDirection: 'row', alignItems: 'center', gap: 4},
   calBtn:      {padding: 8},
 
   stripWrap: {
