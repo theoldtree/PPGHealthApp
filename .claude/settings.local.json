@@ -87,7 +87,12 @@
       "Bash(sqlite3 /Users/yujeongmu/Desktop/ppg-backend/test.db \"SELECT COUNT\\(*\\) FROM notifications; SELECT id, user_id, type, title, is_read FROM notifications LIMIT 10;\")",
       "Bash(sqlite3 /Users/yujeongmu/Desktop/ppg-backend/test.db \"DELETE FROM notifications; SELECT COUNT\\(*\\) FROM notifications;\")",
       "Bash(# 실행 중인 시뮬레이터의 앱 컨테이너 찾기 xcrun simctl listapps booted)",
-      "Bash(xcrun simctl listapps booted)"
+      "Bash(xcrun simctl listapps booted)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(export PATH=\"/usr/local/bin:/opt/homebrew/bin:$PATH\")",
+      "Bash(node ./node_modules/.bin/tsc --noEmit)",
+      "Bash(/opt/homebrew/bin/node ./node_modules/.bin/tsc --noEmit)",
+      "Bash(/Users/yujeongmu/.nvm/versions/node/v20.19.6/bin/node ./node_modules/.bin/tsc --noEmit)"
     ]
   }
 }
