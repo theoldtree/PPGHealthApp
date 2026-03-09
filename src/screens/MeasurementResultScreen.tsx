@@ -255,6 +255,7 @@ export const MeasurementResultScreen: React.FC<Props> = ({record, onSaveAndClose
                 value={`${general.hrvRmssd} ms`}
                 valueColor={general.hrvRmssd >= 40 ? Colors.statusGood : general.hrvRmssd >= 20 ? Colors.statusWarning : Colors.statusDanger}
                 desc="부교감신경 활성도 (높을수록 안정. 40ms↑ 양호)"
+                onInfo={() => setInfoKey('hrvRmssd')}
               />
             )}
             <MetricDetailRow

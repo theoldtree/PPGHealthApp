@@ -48,6 +48,19 @@ export const METRIC_GUIDES: MetricGuide[] = [
     reference: 'Task Force of ESC/NASPE (1996)',
   },
   {
+    key: 'hrvRmssd',
+    title: 'HRV RMSSD',
+    unit: 'ms',
+    description:
+      '연속된 RR 간격 차이의 제곱평균제곱근(RMSSD)으로, 부교감신경(미주신경) 활성도를 직접 반영합니다. SDNN보다 단기 변동성에 민감하며, 스트레스·회복 상태 평가에 자주 사용됩니다. 높을수록 심장이 환경 변화에 유연하게 반응하는 상태입니다.',
+    ranges: [
+      {label: '낮음', color: Colors.statusDanger,   desc: '< 20 ms (부교감 활성 저하)'},
+      {label: '보통', color: Colors.statusWarning, desc: '20 – 40 ms'},
+      {label: '양호', color: Colors.statusGood,    desc: '> 40 ms'},
+    ],
+    reference: 'Task Force of ESC/NASPE (1996)',
+  },
+  {
     key: 'pi',
     title: '관류 지수 (PI)',
     unit: '%',

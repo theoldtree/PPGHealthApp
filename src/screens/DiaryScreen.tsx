@@ -14,11 +14,18 @@ import {
 } from 'react-native';
 import {Calendar} from 'react-native-calendars';
 import Svg, {Path} from 'react-native-svg';
-import {Colors, StatusColors, StatusLabels} from '../config/colors';
+import {Colors, StatusColors} from '../config/colors';
 import type {MeasurementRecord} from '../types/measurement';
 import {getMeasurementHistory} from '../api/measurements';
 import {METRIC_GUIDES} from '../config/guides';
-import {getLocalRecords} from '../utils/localCache';
+import {getLocalRecords, clearLocalCache} from '../utils/localCache';
+import {
+  getHeartRateStatus,
+  getHRVStatus,
+  getPIStatus,
+  getOverallFeedback,
+  getPercentileExplanation,
+} from '../utils/metrics';
 
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 const DAY_KOR = ['일', '월', '화', '수', '목', '금', '토'];
@@ -59,93 +66,76 @@ function groupByDate(records: MeasurementRecord[]): Record<string, MeasurementRe
   return map;
 }
 
+// ── APG 경직도 레이블 ──────────────────────────────────────────────────────────
+function apgLabel(bOverA: number): {text: string; color: string} {
+  if (bOverA > -0.40) return {text: '양호', color: Colors.statusGood};
+  if (bOverA >= -0.55) return {text: '경미한 노화', color: Colors.statusWarning};
+  return {text: '혈관 경직', color: Colors.statusDanger};
+}
+
 // ── 지표 칩 ───────────────────────────────────────────────────────────────────
-const MetricChip = ({label, value, unit, status}: {
-  label: string; value: number; unit: string; status?: string;
+const MetricChip = ({label, value, unit, statusText, statusColor}: {
+  label: string; value: string; unit: string; statusText: string; statusColor: string;
 }) => (
   <View style={chipSt.chip}>
     <Text style={chipSt.label}>{label}</Text>
     <Text style={chipSt.value}>
       {value}<Text style={chipSt.unit}> {unit}</Text>
     </Text>
-    {status && (
-      <View style={[chipSt.badge, {
-        backgroundColor: StatusColors[status as keyof typeof StatusColors] ?? Colors.statusNeutral,
-      }]}>
-        <Text style={chipSt.badgeText}>
-          {StatusLabels[status as keyof typeof StatusLabels] ?? status}
-        </Text>
-      </View>
-    )}
+    <View style={[chipSt.badge, {backgroundColor: statusColor}]}>
+      <Text style={chipSt.badgeText}>{statusText}</Text>
+    </View>
   </View>
 );
 
 const chipSt = StyleSheet.create({
-  chip:      {flex: 1, backgroundColor: Colors.primaryLight, borderRadius: 10, padding: 10, alignItems: 'center', marginHorizontal: 3},
-  label:     {fontSize: 10, color: Colors.textSecondary, marginBottom: 2},
-  value:     {fontSize: 18, fontWeight: '700', color: Colors.textPrimary},
+  chip:      {flex: 1, backgroundColor: Colors.card, borderRadius: 14, padding: 12, alignItems: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1},
+  label:     {fontSize: 10, color: Colors.textSecondary, marginBottom: 4},
+  value:     {fontSize: 20, fontWeight: '700', color: Colors.textPrimary, marginBottom: 6},
   unit:      {fontSize: 11, fontWeight: '400', color: Colors.textSecondary},
-  badge:     {marginTop: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6},
-  badgeText: {fontSize: 10, fontWeight: '600', color: Colors.white},
+  badge:     {paddingVertical: 3, paddingHorizontal: 8, borderRadius: 8},
+  badgeText: {fontSize: 11, fontWeight: '600', color: Colors.white},
 });
 
-// ── 비교 행 ───────────────────────────────────────────────────────────────────
-const CompareRow = ({label, diff, unit, higherIsBetter}: {
-  label: string; diff: number; unit: string; higherIsBetter: boolean;
-}) => {
-  const isGood = diff === 0 ? null : (higherIsBetter ? diff > 0 : diff < 0);
-  const color  = diff === 0 ? Colors.textSecondary : isGood ? Colors.statusGood : Colors.statusDanger;
-  const arrow  = diff === 0 ? '─' : diff > 0 ? '▲' : '▼';
-  return (
-    <View style={cmpSt.row}>
-      <Text style={cmpSt.label}>{label}</Text>
-      <Text style={[cmpSt.diff, {color}]}>{arrow} {diff > 0 ? '+' : ''}{diff} {unit}</Text>
-      <Text style={cmpSt.note}>
-        {diff === 0 ? '평균과 동일' : `${Math.abs(diff)} ${unit} ${diff > 0 ? '높음' : '낮음'}`}
-      </Text>
+// ── DemoRow ────────────────────────────────────────────────────────────────────
+const DemoRow = ({label, value, valueColor, last}: {
+  label: string; value: string; valueColor?: string; last?: boolean;
+}) => (
+  <View style={[cardSt.demoRow, last && {borderBottomWidth: 0}]}>
+    <Text style={cardSt.demoLabel}>{label}</Text>
+    <Text style={[cardSt.demoValue, valueColor ? {color: valueColor, fontWeight: '700'} : {}]}>
+      {value}
+    </Text>
+  </View>
+);
+
+// ── MetricDetailRow ────────────────────────────────────────────────────────────
+const MetricDetailRow = ({label, value, valueColor, desc, diff, diffColor, last}: {
+  label: string; value: string; valueColor: string; desc: string;
+  diff?: string; diffColor?: string; last?: boolean;
+}) => (
+  <View style={[cardSt.detailRow, last && {borderBottomWidth: 0}]}>
+    <View style={cardSt.detailLeft}>
+      <Text style={cardSt.detailLabel}>{label}</Text>
+      <Text style={cardSt.detailDesc}>{desc}</Text>
     </View>
-  );
-};
-
-const cmpSt = StyleSheet.create({
-  row:   {flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: Colors.border},
-  label: {width: 44, fontSize: 13, color: Colors.textSecondary},
-  diff:  {fontSize: 14, fontWeight: '700', marginHorizontal: 8, minWidth: 72},
-  note:  {flex: 1, fontSize: 12, color: Colors.textTertiary, textAlign: 'right'},
-});
-
-// ── 퍼센타일 바 ───────────────────────────────────────────────────────────────
-const PercentileBar = ({percentile, ageAvg, myHR}: {
-  percentile: number; ageAvg: number; myHR: number;
-}) => {
-  const pct = Math.max(4, Math.min(94, percentile));
-  return (
-    <View>
-      <View style={pctSt.barBg}>
-        <View style={[pctSt.barFill, {width: `${pct}%` as any}]} />
-        <View style={[pctSt.dot, {left: `${pct}%` as any}]} />
-      </View>
-      <View style={pctSt.labels}>
-        <Text style={pctSt.edge}>낮음</Text>
-        <View style={{alignItems: 'center'}}>
-          <Text style={pctSt.myVal}>{myHR} bpm</Text>
-          <Text style={pctSt.avgVal}>연령 평균 {ageAvg} bpm</Text>
-        </View>
-        <Text style={pctSt.edge}>높음</Text>
-      </View>
+    <View style={cardSt.detailRight}>
+      <Text style={[cardSt.detailValue, {color: valueColor}]}>{value}</Text>
+      {diff !== undefined && (
+        <Text style={[cardSt.detailDiff, {color: diffColor ?? Colors.textSecondary}]}>{diff}</Text>
+      )}
     </View>
-  );
-};
+  </View>
+);
 
-const pctSt = StyleSheet.create({
-  barBg:  {height: 6, backgroundColor: Colors.border, borderRadius: 3, marginVertical: 8, position: 'relative'},
-  barFill:{height: '100%', backgroundColor: Colors.primary, borderRadius: 3, position: 'absolute'},
-  dot:    {width: 14, height: 14, borderRadius: 7, backgroundColor: Colors.primary, borderWidth: 2, borderColor: Colors.white, position: 'absolute', top: -4, marginLeft: -7},
-  labels: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  edge:   {fontSize: 11, color: Colors.textTertiary},
-  myVal:  {fontSize: 12, fontWeight: '700', color: Colors.primary},
-  avgVal: {fontSize: 11, color: Colors.textTertiary},
-});
+// ── ApgScaleItem ───────────────────────────────────────────────────────────────
+const ApgScaleItem = ({value, label, color}: {value: string; label: string; color: string}) => (
+  <View style={cardSt.apgScaleItem}>
+    <View style={[cardSt.apgScaleDot, {backgroundColor: color}]} />
+    <Text style={cardSt.apgScaleVal}>{value}</Text>
+    <Text style={cardSt.apgScaleLbl}>{label}</Text>
+  </View>
+);
 
 // ── 측정 카드 (아코디언) ──────────────────────────────────────────────────────
 const RecordCard = ({record}: {record: MeasurementRecord}) => {
@@ -168,81 +158,206 @@ const RecordCard = ({record}: {record: MeasurementRecord}) => {
         <Text style={cardSt.toggle}>{expanded ? '∧ 접기' : '∨ 펼치기'}</Text>
       </TouchableOpacity>
 
-      {expanded && analysis && (
-        <View style={cardSt.body}>
-          {/* 지표 칩 */}
-          <View style={{flexDirection: 'row', marginBottom: 14}}>
-            <MetricChip label="심박수" value={analysis.general.heartRate} unit="bpm" status={analysis.general.status} />
-            <MetricChip label="HRV"   value={analysis.general.hrv}       unit="ms" />
-            <MetricChip label="PI"    value={analysis.general.pi}        unit="%" />
-          </View>
+      {expanded && analysis && (() => {
+        const {general, personal, demographic} = analysis;
+        const hrStatus  = getHeartRateStatus(general.heartRate);
+        const hrvStatus = getHRVStatus(general.hrv);
+        const piStatus  = getPIStatus(general.pi);
+        const feedback  = getOverallFeedback(general.heartRate, general.hrv);
+        const sColor    = StatusColors[general.status] ?? Colors.statusNeutral;
 
-          {/* 나의 평균 대비 */}
-          <Text style={cardSt.secTitle}>나의 평균 대비</Text>
-          <View style={cardSt.box}>
-            <CompareRow label="심박수" diff={analysis.personal.heartRateDiff} unit="bpm" higherIsBetter={false} />
-            <CompareRow label="HRV"   diff={analysis.personal.hrvDiff}        unit="ms"  higherIsBetter={true}  />
-          </View>
+        return (
+          <View style={cardSt.body}>
 
-          {/* 집단 대비 — 심박수 */}
-          <Text style={cardSt.secTitle}>동일 연령대 비교</Text>
-          <View style={cardSt.box}>
-            <View style={{flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 2}}>
-              <Text style={cardSt.secTitle}>HR 상위</Text>
-              <Text style={[{fontSize: 26, fontWeight: '800'}, {color: statusColor}]}>
-                {analysis.demographic.percentile}%
-              </Text>
+            {/* ② 종합 피드백 배너 */}
+            <View style={[cardSt.feedbackBanner, {borderLeftColor: feedback.color}]}>
+              <View style={cardSt.feedbackTop}>
+                <View style={[cardSt.feedbackDot, {backgroundColor: feedback.color}]} />
+                <Text style={[cardSt.feedbackSummary, {color: feedback.color}]}>
+                  {feedback.summary}
+                </Text>
+              </View>
+              <Text style={cardSt.feedbackAdvice}>{feedback.advice}</Text>
             </View>
-            <PercentileBar
-              percentile={analysis.demographic.percentile}
-              ageAvg={analysis.demographic.ageGroupAvg}
-              myHR={analysis.general.heartRate}
-            />
-            {/* HRV 집단 대비 */}
-            {analysis.demographic.avgHrvSdnn !== undefined && analysis.demographic.avgHrvSdnn !== null && (
-              <View style={{marginTop: 8, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 8}}>
-                <Text style={[cardSt.secTitle, {marginBottom: 4}]}>HRV 연령대 기준 ({analysis.demographic.avgHrvSdnn} ms 평균)</Text>
-                <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-                  <Text style={{fontSize: 12, color: Colors.textSecondary}}>내 HRV</Text>
-                  <Text style={{
-                    fontSize: 13, fontWeight: '700',
-                    color: analysis.general.hrv >= analysis.demographic.avgHrvSdnn ? Colors.statusGood : Colors.statusDanger,
-                  }}>
-                    {analysis.general.hrv} ms {analysis.general.hrv >= analysis.demographic.avgHrvSdnn ? '▲' : '▼'} {Math.abs(analysis.general.hrv - analysis.demographic.avgHrvSdnn)} ms
-                  </Text>
+
+            {/* ③ 핵심 지표 3종 */}
+            <View style={cardSt.metricsRow}>
+              <MetricChip label="심박수" value={`${general.heartRate}`} unit="bpm" statusText={hrStatus.text} statusColor={hrStatus.color} />
+              <MetricChip label="HRV"   value={`${general.hrv}`}       unit="ms"  statusText={hrvStatus.text} statusColor={hrvStatus.color} />
+              <MetricChip label="PI"    value={`${general.pi}`}        unit="%"   statusText={piStatus.text}  statusColor={piStatus.color} />
+            </View>
+
+            {/* ④ 집단 대비 분석 */}
+            <Text style={cardSt.secTitle}>집단 대비 분석</Text>
+
+            {/* 심박수 백분위 */}
+            <View style={cardSt.card}>
+              <View style={cardSt.cardHeader}>
+                <Text style={cardSt.cardHeaderTitle}>심박수 백분위</Text>
+                <Text style={cardSt.cardHeaderDesc}>동일 연령·성별 집단 내 위치</Text>
+              </View>
+              <View style={cardSt.pctRow}>
+                <View style={cardSt.pctBlock}>
+                  <Text style={cardSt.pctLabel}>상위</Text>
+                  <Text style={[cardSt.pctValue, {color: sColor}]}>{demographic.percentile}%</Text>
                 </View>
+                <Text style={cardSt.pctNote}>{getPercentileExplanation(demographic.percentile)}</Text>
+              </View>
+              <View style={cardSt.barBg}>
+                <View style={[cardSt.barFill, {
+                  width: `${Math.max(4, Math.min(94, demographic.percentile))}%` as any,
+                  backgroundColor: sColor,
+                }]} />
+                <View style={[cardSt.barDot, {
+                  left: `${Math.max(4, Math.min(94, demographic.percentile))}%` as any,
+                  backgroundColor: sColor,
+                }]} />
+              </View>
+              <DemoRow label="내 심박수"   value={`${general.heartRate} bpm`} />
+              <DemoRow label="연령대 평균" value={`${demographic.ageGroupAvg} bpm`} />
+              <DemoRow
+                label="차이"
+                value={`${general.heartRate - demographic.ageGroupAvg > 0 ? '+' : ''}${general.heartRate - demographic.ageGroupAvg} bpm`}
+                valueColor={general.heartRate <= demographic.ageGroupAvg ? Colors.statusGood : Colors.statusDanger}
+                last
+              />
+            </View>
+
+            {/* HRV 집단 대비 */}
+            {demographic.avgHrvSdnn !== undefined && demographic.avgHrvSdnn !== null && (
+              <View style={[cardSt.card, {marginBottom: 10}]}>
+                <View style={cardSt.cardHeader}>
+                  <Text style={cardSt.cardHeaderTitle}>HRV 집단 대비</Text>
+                  <Text style={cardSt.cardHeaderDesc}>동일 연령대 HRV SDNN 기준값 (Task Force 1996)</Text>
+                </View>
+                <DemoRow label="내 HRV"      value={`${general.hrv} ms`} />
+                <DemoRow label="연령대 평균" value={`${demographic.avgHrvSdnn} ms`} />
+                <DemoRow
+                  label="차이"
+                  value={`${general.hrv - demographic.avgHrvSdnn > 0 ? '+' : ''}${general.hrv - demographic.avgHrvSdnn} ms`}
+                  valueColor={general.hrv >= demographic.avgHrvSdnn ? Colors.statusGood : Colors.statusDanger}
+                  last
+                />
               </View>
             )}
-          </View>
 
-          {/* 조언 */}
-          {record.advice && (
-            <View style={cardSt.adviceBox}>
-              <Text style={{fontSize: 16, marginRight: 8}}>💡</Text>
-              <Text style={cardSt.adviceText}>{record.advice}</Text>
-            </View>
-          )}
-
-          {/* 태그 */}
-          {record.tags && record.tags.length > 0 && (
-            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6}}>
-              {record.tags.map(tag => (
-                <View key={tag} style={cardSt.tag}>
-                  <Text style={cardSt.tagText}>#{tag}</Text>
+            {/* APG b/a 동맥 경직도 */}
+            {general.apgBOverA !== undefined && general.apgBOverA !== null && (() => {
+              const {text, color} = apgLabel(general.apgBOverA);
+              return (
+                <View style={[cardSt.card, {marginBottom: 10}]}>
+                  <View style={cardSt.cardHeader}>
+                    <Text style={cardSt.cardHeaderTitle}>동맥 경직도 (APG b/a)</Text>
+                    <Text style={cardSt.cardHeaderDesc}>가속도 맥파 b파/a파 비율 · 혈관 탄성 지표</Text>
+                  </View>
+                  <View style={cardSt.apgRow}>
+                    <View style={cardSt.apgValueBlock}>
+                      <Text style={[cardSt.apgValue, {color}]}>{general.apgBOverA.toFixed(3)}</Text>
+                      <View style={[cardSt.statusBadge, {backgroundColor: color}]}>
+                        <Text style={cardSt.statusBadgeText}>{text}</Text>
+                      </View>
+                    </View>
+                    <View style={cardSt.apgRefBlock}>
+                      <Text style={cardSt.apgRefLabel}>연령대 기준값</Text>
+                      <Text style={cardSt.apgRefValue}>
+                        {demographic.apgBOverARef !== undefined && demographic.apgBOverARef !== null
+                          ? `${demographic.apgBOverARef.toFixed(2)} ± ${(demographic.apgBOverAStd ?? 0.14).toFixed(2)}`
+                          : '–'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={cardSt.apgScaleRow}>
+                    <ApgScaleItem value="> -0.40"    label="양호"       color={Colors.statusGood} />
+                    <ApgScaleItem value="-0.40~-0.55" label="경미한 노화" color={Colors.statusWarning} />
+                    <ApgScaleItem value="< -0.55"    label="혈관 경직"  color={Colors.statusDanger} />
+                  </View>
                 </View>
-              ))}
-            </View>
-          )}
+              );
+            })()}
 
-          {/* 나의 메모 */}
-          <Text style={cardSt.secTitle}>나의 메모</Text>
-          <View style={cardSt.memoBox}>
-            <Text style={record.notes ? cardSt.notes : cardSt.notesEmpty}>
-              {record.notes || '메모가 없습니다'}
-            </Text>
+            {/* ⑤ 개인 대비 분석 */}
+            <Text style={cardSt.secTitle}>개인 대비 분석</Text>
+            {personal.trend === 'first' && (
+              <View style={cardSt.firstBanner}>
+                <Text style={cardSt.firstBannerText}>
+                  첫 번째 측정입니다. 측정을 반복할수록 개인 기준값이 쌓여 변화 추이를 확인할 수 있습니다.
+                </Text>
+              </View>
+            )}
+            <View style={cardSt.card}>
+              <MetricDetailRow
+                label="심박수 변화"
+                value={personal.trend === 'first' ? '–' : `${personal.heartRateDiff > 0 ? '+' : ''}${personal.heartRateDiff} bpm`}
+                valueColor={Colors.textSecondary}
+                desc="나의 평균 심박수 대비 오늘의 변화량"
+              />
+              <MetricDetailRow
+                label="HRV SDNN"
+                value={`${general.hrv} ms`}
+                valueColor={general.hrv >= 50 ? Colors.statusGood : general.hrv >= 30 ? Colors.statusWarning : Colors.statusDanger}
+                desc="심박 변동성 (자율신경계 활성 지표. 50ms↑ 양호)"
+                diff={personal.hrvDiff !== 0 ? `${personal.hrvDiff > 0 ? '+' : ''}${personal.hrvDiff} ms` : undefined}
+                diffColor={personal.hrvDiff > 0 ? Colors.statusGood : Colors.statusDanger}
+              />
+              {general.hrvRmssd !== undefined && general.hrvRmssd !== null && (
+                <MetricDetailRow
+                  label="HRV RMSSD"
+                  value={`${general.hrvRmssd} ms`}
+                  valueColor={general.hrvRmssd >= 40 ? Colors.statusGood : general.hrvRmssd >= 20 ? Colors.statusWarning : Colors.statusDanger}
+                  desc="부교감신경 활성도 (높을수록 안정. 40ms↑ 양호)"
+                />
+              )}
+              <MetricDetailRow
+                label="관류 지수 (PI)"
+                value={`${general.pi.toFixed(2)} %`}
+                valueColor={piStatus.color}
+                desc="말초 혈류량 지표. 0.2~20% 정상 범위"
+              />
+              <MetricDetailRow
+                label="AC (맥파 진폭)"
+                value={general.ac.toFixed(2)}
+                valueColor={Colors.textPrimary}
+                desc="맥파 교류 성분 — 심장 박동에 의한 혈류 진동"
+              />
+              <MetricDetailRow
+                label="DC (기저 혈류)"
+                value={general.dc.toFixed(2)}
+                valueColor={Colors.textPrimary}
+                desc="맥파 직류 성분 — 조직의 기저 혈류량"
+                last
+              />
+            </View>
+
+            {/* ⑥ 조언 */}
+            {record.advice && (
+              <View style={cardSt.adviceCard}>
+                <Text style={cardSt.adviceIcon}>💡</Text>
+                <Text style={cardSt.adviceText}>{record.advice}</Text>
+              </View>
+            )}
+
+            {/* 태그 */}
+            {record.tags && record.tags.length > 0 && (
+              <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8, marginTop: 4}}>
+                {record.tags.map(tag => (
+                  <View key={tag} style={cardSt.tag}>
+                    <Text style={cardSt.tagText}>#{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* 나의 메모 */}
+            <Text style={cardSt.secTitle}>나의 메모</Text>
+            <View style={cardSt.memoBox}>
+              <Text style={record.notes ? cardSt.notes : cardSt.notesEmpty}>
+                {record.notes || '메모가 없습니다'}
+              </Text>
+            </View>
+
           </View>
-        </View>
-      )}
+        );
+      })()}
     </View>
   );
 };
@@ -264,13 +379,79 @@ const cardSt = StyleSheet.create({
   time:    {fontSize: 14, fontWeight: '700', color: Colors.textPrimary, marginRight: 8},
   summary: {fontSize: 13, color: Colors.textSecondary, flex: 1},
   toggle:  {fontSize: 12, color: Colors.primary, fontWeight: '600', marginLeft: 8},
-  body:    {paddingHorizontal: 14, paddingBottom: 14},
-  secTitle:{fontSize: 12, fontWeight: '700', color: Colors.textSecondary, marginBottom: 6, marginTop: 4},
-  box:     {backgroundColor: Colors.background, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 10},
-  adviceBox:{flexDirection: 'row', backgroundColor: Colors.primaryLight, borderRadius: 10, padding: 12, marginBottom: 8},
-  adviceText:{flex: 1, fontSize: 13, color: Colors.textPrimary, lineHeight: 20},
-  tag:        {backgroundColor: Colors.primaryLight, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4},
-  tagText:    {fontSize: 12, color: Colors.primary, fontWeight: '600'},
+  body:    {paddingHorizontal: 12, paddingBottom: 14},
+
+  secTitle: {fontSize: 12, fontWeight: '700', color: Colors.textSecondary, marginBottom: 8, marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5},
+
+  // Feedback banner
+  feedbackBanner:  {padding: 12, backgroundColor: Colors.background, borderRadius: 12, borderLeftWidth: 4, marginBottom: 12},
+  feedbackTop:     {flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8},
+  feedbackDot:     {width: 8, height: 8, borderRadius: 4},
+  feedbackSummary: {fontSize: 14, fontWeight: '700', flex: 1},
+  feedbackAdvice:  {fontSize: 12, color: Colors.textSecondary, lineHeight: 18},
+
+  // Metrics row
+  metricsRow: {flexDirection: 'row', gap: 8, marginBottom: 14},
+
+  // Inner card (section)
+  card:            {backgroundColor: Colors.background, borderRadius: 12, overflow: 'hidden', marginBottom: 10},
+  cardHeader:      {paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: Colors.border},
+  cardHeaderTitle: {fontSize: 13, fontWeight: '700', color: Colors.textPrimary},
+  cardHeaderDesc:  {fontSize: 11, color: Colors.textSecondary, marginTop: 2},
+
+  // Percentile bar
+  pctRow:   {flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12},
+  pctBlock: {alignItems: 'center'},
+  pctLabel: {fontSize: 11, color: Colors.textSecondary},
+  pctValue: {fontSize: 28, fontWeight: '800'},
+  pctNote:  {flex: 1, fontSize: 12, color: Colors.textSecondary, lineHeight: 18},
+  barBg:    {height: 6, backgroundColor: Colors.border, marginHorizontal: 12, marginBottom: 10, position: 'relative', borderRadius: 3},
+  barFill:  {height: '100%', borderRadius: 3, position: 'absolute'},
+  barDot:   {width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: Colors.white, position: 'absolute', top: -3, marginLeft: -6},
+
+  // DemoRow
+  demoRow:   {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: Colors.border},
+  demoLabel: {fontSize: 12, color: Colors.textSecondary},
+  demoValue: {fontSize: 13, fontWeight: '600', color: Colors.textPrimary},
+
+  // APG section
+  apgRow:          {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border},
+  apgValueBlock:   {alignItems: 'flex-start', gap: 6},
+  apgValue:        {fontSize: 24, fontWeight: '800'},
+  statusBadge:     {paddingVertical: 3, paddingHorizontal: 8, borderRadius: 8},
+  statusBadgeText: {fontSize: 11, fontWeight: '600', color: Colors.white},
+  apgRefBlock:     {alignItems: 'flex-end'},
+  apgRefLabel:     {fontSize: 11, color: Colors.textSecondary, marginBottom: 2},
+  apgRefValue:     {fontSize: 13, fontWeight: '600', color: Colors.textPrimary},
+  apgScaleRow:     {flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10, gap: 8},
+  apgScaleItem:    {flex: 1, alignItems: 'center', gap: 3},
+  apgScaleDot:     {width: 7, height: 7, borderRadius: 3.5},
+  apgScaleVal:     {fontSize: 9, color: Colors.textSecondary, textAlign: 'center'},
+  apgScaleLbl:     {fontSize: 9, fontWeight: '600', color: Colors.textPrimary, textAlign: 'center'},
+
+  // MetricDetailRow
+  detailRow:   {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: Colors.border},
+  detailLeft:  {flex: 1, marginRight: 10},
+  detailLabel: {fontSize: 13, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2},
+  detailDesc:  {fontSize: 11, color: Colors.textTertiary, lineHeight: 15},
+  detailRight: {alignItems: 'flex-end'},
+  detailValue: {fontSize: 15, fontWeight: '700'},
+  detailDiff:  {fontSize: 11, marginTop: 2},
+
+  // First measurement banner
+  firstBanner:     {backgroundColor: Colors.primaryLight, borderRadius: 10, padding: 10, marginBottom: 10},
+  firstBannerText: {fontSize: 12, color: Colors.primary, lineHeight: 18},
+
+  // Advice
+  adviceCard: {flexDirection: 'row', backgroundColor: Colors.primaryLight, borderRadius: 12, padding: 12, gap: 8, marginBottom: 8, marginTop: 4},
+  adviceIcon: {fontSize: 18},
+  adviceText: {flex: 1, fontSize: 13, color: Colors.textPrimary, lineHeight: 20},
+
+  // Tags
+  tag:     {backgroundColor: Colors.primaryLight, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4},
+  tagText: {fontSize: 12, color: Colors.primary, fontWeight: '600'},
+
+  // Notes
   memoBox:    {backgroundColor: Colors.background, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 4, minHeight: 40},
   notes:      {fontSize: 13, color: Colors.textPrimary, lineHeight: 18},
   notesEmpty: {fontSize: 13, color: Colors.textTertiary, lineHeight: 18, fontStyle: 'italic'},
@@ -427,8 +608,9 @@ export const DiaryScreen: React.FC = () => {
         setIsLoading(true);
         try {
           const history = await getMeasurementHistory();
-          if (history.length > 0) {
-            setAllRecords(history);
+          setAllRecords(history);               // empty array also resets state
+          if (history.length === 0) {
+            await clearLocalCache();            // DB is empty → invalidate stale cache
           }
         } catch {
           // Backend not available — fall back to local cache

@@ -64,8 +64,11 @@ const _pickMockSignal = (): number[] =>
 const _sourceSamplesPerPacket = Math.round(_mockSignalRate * DATA_GENERATION_INTERVAL / 1000); // 15
 const _resampleStep = _sourceSamplesPerPacket / BLE_SAMPLES_PER_PACKET; // 1.5
 
-/** Samples shown in chart (last 3 s at 200 Hz = 600 samples) */
-const CHART_DISPLAY_SAMPLES = 600;
+/**
+ * Max data points sent to PPGChart state (downsampled from the full buffer).
+ * 60s × 240Hz = 14,400 raw samples → downsample to 480 visual points.
+ */
+const CHART_RENDER_POINTS = 480;
 
 // ── BLE packet codec (mock and real sensor share the same parser) ─────────────
 /**
@@ -264,6 +267,7 @@ export interface UseMeasurementResult {
   isRecording: boolean;
   elapsedTime: number;
   ppgData: number[];
+  ppgDisplayData: number[];   // raw float values (0–1) for chart display
   batteryLevel: number;
   qcFeedback: string;
   qcIsAcceptable: boolean;
@@ -287,6 +291,7 @@ export const useMeasurement = (
   const [isRecording, setIsRecording] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [ppgData, setPpgData] = useState<number[]>([]);
+  const [ppgDisplayData, setPpgDisplayData] = useState<number[]>([]);
   const [batteryLevel, setBatteryLevel] = useState(100);
   const [qcFeedback, setQcFeedback] = useState<string>('');
   const [qcIsAcceptable, setQcIsAcceptable] = useState<boolean>(true);
@@ -298,6 +303,7 @@ export const useMeasurement = (
   const dataSenderRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const displayTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const ppgDataRef       = useRef<number[]>([]);
+  const ppgDisplayRef    = useRef<number[]>([]);   // raw float values for chart
   const measurementIdRef = useRef<number | null>(null);
   const windowIndexRef   = useRef<number>(0);
   const elapsedRef       = useRef<number>(0);
@@ -370,9 +376,9 @@ export const useMeasurement = (
       for (let i = 0; i < BLE_SAMPLES_PER_PACKET; i++) {
         const srcIdx = Math.round(srcBase + i * _resampleStep) % signal.length;
         const f = signal[srcIdx] ?? _MOCK_FLOAT_MEAN;
-        // Map float → 10-bit ADC: center at DC_OFFSET, scale AC deviation
-        const adc = Math.round(_MOCK_ADC_DC + (f - _MOCK_FLOAT_MEAN) * _MOCK_ADC_AC);
-        adcSamples.push(Math.max(0, Math.min(0x3FF, adc)));
+        ppgDisplayRef.current.push(f);   // raw float for analysis (_buildMockRecord)
+        // Map float [0,1] → 10-bit ADC [0,1023] directly — preserves full signal range
+        adcSamples.push(Math.round(Math.max(0, Math.min(0x3FF, f * 0x3FF))));
       }
       const idx = packetIndexRef.current;
       const pkt = _buildBLEPacket(adcSamples, idx, 100 /* battery in mock */);
@@ -447,36 +453,43 @@ export const useMeasurement = (
     const sampleRate = PPG_SAMPLING_RATE;
 
     if (USE_MOCK_MEASUREMENT) {
-      // Step 2a (mock): build result locally for immediate display
-      const record = _buildMockRecord(ppgDataRef.current.slice(), duration, mId);
-      onAnalysisComplete(record);
+      // Step 2a (mock): build result from raw float values for accurate analysis
+      const floatSignal = ppgDisplayRef.current.length > 0
+        ? ppgDisplayRef.current.slice()
+        : ppgDataRef.current.slice();
+      const record = _buildMockRecord(floatSignal, duration, mId);
 
-      // Step 2b-local: cache immediately to AsyncStorage (works even without backend)
+      // Step 2b: cache to AsyncStorage immediately (works without backend)
       saveLocalRecord(record).catch(() => {/* silent */});
 
-      // Step 2c: save pre-computed mock values to backend asynchronously.
-      // We do NOT re-send the raw PPG signal (which is binary WFDB gain-encoded
-      // and would produce garbage HR/HRV/PI values when re-processed by the backend).
+      // Step 2c: save pre-computed mock values to backend.
+      // Await this so DiaryScreen sees the analysis data when the user navigates there.
+      // (without await, a race condition can cause the diary to load before heart_rate is saved)
       if (record.analysis) {
         const g = record.analysis.general;
         const d = record.analysis.demographic;
-        saveMockAnalysis(mId, {
-          heart_rate:       g.heartRate,
-          hrv_sdnn:         g.hrv,
-          hrv_rmssd:        g.hrvRmssd,
-          pi:               g.pi,
-          ac:               g.ac,
-          dc:               g.dc,
-          apg_b_over_a:     g.apgBOverA,
-          apg_ai:           g.apgAI,
-          status:           g.status,
-          percentile:       d.percentile,
-          age_group_avg:    d.ageGroupAvg,
-          gender_group_avg: d.genderGroupAvg,
-        }).catch(err => {
-          console.warn('Background mock analysis save failed:', err);
-        });
+        try {
+          await saveMockAnalysis(mId, {
+            heart_rate:       g.heartRate,
+            hrv_sdnn:         g.hrv,
+            hrv_rmssd:        g.hrvRmssd,
+            pi:               g.pi,
+            ac:               g.ac,
+            dc:               g.dc,
+            apg_b_over_a:     g.apgBOverA,
+            apg_ai:           g.apgAI,
+            status:           g.status,
+            percentile:       d.percentile,
+            age_group_avg:    d.ageGroupAvg,
+            gender_group_avg: d.genderGroupAvg,
+          });
+        } catch (err) {
+          console.warn('Mock analysis save failed (result still shown from local):', err);
+        }
       }
+
+      // Step 2d: show result (after backend save so diary is in sync)
+      onAnalysisComplete(record);
       return;
     }
 
@@ -511,7 +524,9 @@ export const useMeasurement = (
       setElapsedTime(0);
       elapsedRef.current = 0;
       setPpgData([]);
+      setPpgDisplayData([]);
       ppgDataRef.current = [];
+      ppgDisplayRef.current = [];
 
       // Mock mode: pick a random recording and reset source position
       if (!USE_BLE_SENSOR) {
@@ -520,12 +535,29 @@ export const useMeasurement = (
         packetIndexRef.current = 0;
       }
 
-      // Display timer: updates chart at 10 Hz showing the last CHART_DISPLAY_SAMPLES
+      // Display timer: updates chart at 10 Hz with downsampled full buffer.
+      // Downsampling keeps the state payload small while showing the entire recording.
       displayTimerRef.current = setInterval(() => {
+        // ADC values → metrics (HR, PI, etc.)
         const buf = ppgDataRef.current;
-        setPpgData(buf.length > CHART_DISPLAY_SAMPLES
-          ? buf.slice(-CHART_DISPLAY_SAMPLES)
-          : buf.slice());
+        if (buf.length > 0) {
+          if (buf.length > CHART_RENDER_POINTS) {
+            const step = Math.floor(buf.length / CHART_RENDER_POINTS);
+            setPpgData(Array.from({length: CHART_RENDER_POINTS}, (_, i) => buf[i * step]));
+          } else {
+            setPpgData(buf.slice());
+          }
+        }
+
+        // Float values → chart display (raw signal, not ADC-encoded)
+        const disp = USE_BLE_SENSOR ? ppgDataRef.current : ppgDisplayRef.current;
+        if (disp.length === 0) { return; }
+        if (disp.length > CHART_RENDER_POINTS) {
+          const step = Math.floor(disp.length / CHART_RENDER_POINTS);
+          setPpgDisplayData(Array.from({length: CHART_RENDER_POINTS}, (_, i) => disp[i * step]));
+        } else {
+          setPpgDisplayData(disp.slice());
+        }
       }, 100);
 
       // Timer
@@ -599,7 +631,9 @@ export const useMeasurement = (
     const discardMeasurement = () => {
       stopIntervals();
       setPpgData([]);
+      setPpgDisplayData([]);
       ppgDataRef.current = [];
+      ppgDisplayRef.current = [];
       setElapsedTime(0);
       elapsedRef.current = 0;
       setMeasurementId(null);
@@ -653,6 +687,7 @@ export const useMeasurement = (
     isRecording,
     elapsedTime,
     ppgData,
+    ppgDisplayData,
     batteryLevel,
     qcFeedback,
     qcIsAcceptable,

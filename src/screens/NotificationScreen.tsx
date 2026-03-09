@@ -126,22 +126,25 @@ const NotifCard = ({
 
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 export const NotificationScreen: React.FC = () => {
-  const {localNotifications, clearLocalNotifications, markLocalRead, markAllLocalRead} = useNotificationContext();
+  const {localNotifications, clearLocalNotifications, markLocalRead, markAllLocalRead, setBackendUnreadCount} = useNotificationContext();
   const [backendNotifications, setBackendNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
       const data = await getNotifications();
-      setBackendNotifications(data.map(toNotification));
+      const mapped = data.map(toNotification);
+      setBackendNotifications(mapped);
       // Backend loaded successfully — clear local duplicates
       clearLocalNotifications();
+      // Sync backend unread count to context for tab badge
+      setBackendUnreadCount(mapped.filter(n => !n.isRead).length);
     } catch {
       // silently fail — local notifications still shown
     } finally {
       setIsLoading(false);
     }
-  }, [clearLocalNotifications]);
+  }, [clearLocalNotifications, setBackendUnreadCount]);
 
   useFocusEffect(
     useCallback(() => {
@@ -160,9 +163,14 @@ export const NotificationScreen: React.FC = () => {
       markLocalRead(id);
       return;
     }
+    // Only decrement if it was unread
+    const wasUnread = backendNotifications.find(n => n.id === id)?.isRead === false;
     setBackendNotifications(prev =>
       prev.map(n => n.id === id ? {...n, isRead: true} : n),
     );
+    if (wasUnread) {
+      setBackendUnreadCount(backendNotifications.filter(n => !n.isRead && n.id !== id).length);
+    }
     try {
       await markNotificationRead(id);
     } catch { /* optimistic update already applied */ }
@@ -171,6 +179,7 @@ export const NotificationScreen: React.FC = () => {
   const handleMarkAllRead = async () => {
     markAllLocalRead();
     setBackendNotifications(prev => prev.map(n => ({...n, isRead: true})));
+    setBackendUnreadCount(0);
     try {
       await markAllNotificationsRead();
     } catch { /* optimistic update already applied */ }

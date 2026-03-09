@@ -142,11 +142,10 @@ export const MeasurementScreen: React.FC = () => {
     setShowResult(false);
   };
 
-  // Update metrics once per second (elapsedTime changes at 1 Hz) — not at every sample (10 Hz)
+  // Recompute metrics whenever new PPG data arrives (10 Hz via displayTimerRef)
   const metrics = useMemo(
     () => computeRealtimeMetrics(ppgData, elapsedTime),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [elapsedTime],
+    [ppgData, elapsedTime],
   );
 
   const bColor   = batteryColor(batteryLevel);
@@ -229,7 +228,7 @@ export const MeasurementScreen: React.FC = () => {
 
       {/* PPG 차트: 전체 너비 */}
       <View style={styles.chartWrap}>
-        <PPGChart data={ppgData} isRecording={isRecording} width={SCREEN_W} height={chartH} />
+        <PPGChart data={ppgData} isRecording={isRecording} elapsedTime={elapsedTime} width={SCREEN_W} height={chartH} />
       </View>
 
       <ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>

@@ -85,7 +85,9 @@
       "Bash(venv/bin/python3 -:*)",
       "Bash(venv/bin/python3 -m alembic upgrade head)",
       "Bash(sqlite3 /Users/yujeongmu/Desktop/ppg-backend/test.db \"SELECT COUNT\\(*\\) FROM notifications; SELECT id, user_id, type, title, is_read FROM notifications LIMIT 10;\")",
-      "Bash(sqlite3 /Users/yujeongmu/Desktop/ppg-backend/test.db \"DELETE FROM notifications; SELECT COUNT\\(*\\) FROM notifications;\")"
+      "Bash(sqlite3 /Users/yujeongmu/Desktop/ppg-backend/test.db \"DELETE FROM notifications; SELECT COUNT\\(*\\) FROM notifications;\")",
+      "Bash(# 실행 중인 시뮬레이터의 앱 컨테이너 찾기 xcrun simctl listapps booted)",
+      "Bash(xcrun simctl listapps booted)"
     ]
   }
 }
